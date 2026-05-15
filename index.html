@@ -63,10 +63,15 @@ html,body{
   #svg-wrap{max-width:98vw;}
 }
 #pizza{width:100%;height:auto;display:block}
-#results-area{width:100%;padding:4px 10px}
+#results-area{
+  width:100%;padding:4px 10px;
+  display:flex;flex-direction:column;align-items:center;
+}
 .result-block{
-  margin-bottom:5px;padding:5px 10px;border-radius:7px;
+  width:auto;min-width:180px;max-width:400px;
+  margin-bottom:5px;padding:6px 14px;border-radius:7px;
   background:#2a2a2e;border:1px solid #3a3a3e;
+  text-align:left; /* text left-aligned inside centered frame */
 }
 .result-block:first-child{border-color:#4a7aae;background:#252830}
 .rb-chord{font-size:18px;font-weight:700;color:#e8e4dc;margin-bottom:1px}
@@ -100,9 +105,12 @@ body.play-mode .rb-chord{color:#7ec8f0}
 <body>
 <div id="app">
   <div id="top-bar">
-    <div id="mode-toggle">
-      <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">Analyze</button>
-      <button class="mode-btn"        id="btn-play"    onclick="setMode('play')">Play</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;font-weight:600;color:#666;letter-spacing:.4px">Mode:</span>
+      <div id="mode-toggle">
+        <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">Analyze</button>
+        <button class="mode-btn"        id="btn-play"    onclick="setMode('play')">Play</button>
+      </div>
     </div>
     <div id="key-selector">
       <label>Key: </label>
@@ -137,37 +145,34 @@ body.play-mode .rb-chord{color:#7ec8f0}
   document.getElementById('manifest-link').href=URL.createObjectURL(mBlob);
 
   // Service Worker (inline via blob)
+  // Service Worker: use try/catch to prevent Android JS crash on blob URL failure
   if('serviceWorker' in navigator){
-    const swCode=`
-const CACHE='chord-clock-v1';
-const ASSETS=[self.location.href.replace('/sw.js',''),'./'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).catch(()=>{}));self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
-self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{const rc=res.clone();caches.open(CACHE).then(c=>c.put(e.request,rc));return res;}).catch(()=>caches.match('/'))));});
-    `;
-    const swBlob=new Blob([swCode],{type:'application/javascript'});
-    const swUrl=URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl).catch(()=>{});
+    try{
+      const swCode=`const CACHE='cc-v2';self.addEventListener('install',e=>{self.skipWaiting();});self.addEventListener('activate',e=>{self.clients.claim();});self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('',{status:408})));});`;
+      const swBlob=new Blob([swCode],{type:'application/javascript'});
+      const swUrl=URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch(()=>{});
+    }catch(e){}
   }
 })();
 
 // ===================== KEY SIGNATURES =====================
 // C major diatonic: C D E F G A B = pcs 0,2,4,5,7,9,11
 const KEY_SIGS=[
-  {label:'— No key (Atonal)', acc:null, scale:null,              flat:false, maj:'', min:'',    badge:'Atonal'},
-  {label:'C major / A minor',  acc:0,  scale:[0,2,4,5,7,9,11],   flat:false, maj:'C',  min:'Am',  badge:'C / Am'},
-  {label:'♯ ×1  (G / Em)',      acc:1,  scale:[0,2,4,6,7,9,11],   flat:false, maj:'G',  min:'Em',  badge:'G / Em'},
-  {label:'♯ ×2  (D / Bm)',      acc:2,  scale:[1,2,4,6,7,9,11],   flat:false, maj:'D',  min:'Bm',  badge:'D / Bm'},
-  {label:'♯ ×3  (A / F♯m)',     acc:3,  scale:[1,2,4,6,8,9,11],   flat:false, maj:'A',  min:'F♯m', badge:'A / F♯m'},
-  {label:'♯ ×4  (E / C♯m)',     acc:4,  scale:[1,3,4,6,8,9,11],   flat:false, maj:'E',  min:'C♯m', badge:'E / C♯m'},
-  {label:'♯ ×5  (B / G♯m)',     acc:5,  scale:[1,3,4,6,8,10,11],  flat:false, maj:'B',  min:'G♯m', badge:'B / G♯m'},
-  {label:'♯ ×6  (F♯ / D♯m)',    acc:6,  scale:[1,3,5,6,8,10,11],  flat:false, maj:'F♯', min:'D♯m', badge:'F♯ / D♯m'},
-  {label:'♭ ×1  (F / Dm)',      acc:-1, scale:[0,2,4,5,7,9,10],   flat:true,  maj:'F',  min:'Dm',  badge:'F / Dm'},
-  {label:'♭ ×2  (B♭ / Gm)',     acc:-2, scale:[0,2,3,5,7,9,10],   flat:true,  maj:'B♭', min:'Gm',  badge:'B♭ / Gm'},
-  {label:'♭ ×3  (E♭ / Cm)',     acc:-3, scale:[0,2,3,5,7,8,10],   flat:true,  maj:'E♭', min:'Cm',  badge:'E♭ / Cm'},
-  {label:'♭ ×4  (A♭ / Fm)',     acc:-4, scale:[0,1,3,5,7,8,10],   flat:true,  maj:'A♭', min:'Fm',  badge:'A♭ / Fm'},
-  {label:'♭ ×5  (D♭ / B♭m)',    acc:-5, scale:[0,1,3,5,6,8,10],   flat:true,  maj:'D♭', min:'B♭m', badge:'D♭ / B♭m'},
-  {label:'♭ ×6  (G♭ / E♭m)',    acc:-6, scale:[1,3,5,6,8,10,11],  flat:true,  maj:'G♭', min:'E♭m', badge:'G♭ / E♭m'},
+  {label:'♯♭×0 - No key (Atonal)', acc:null, scale:null,              flat:false, maj:'', min:'',    badge:'Atonal'},
+  {label:'♯♭×0 - C Major | A minor',  acc:0,  scale:[0,2,4,5,7,9,11],   flat:false, maj:'C',  min:'Am',  badge:'C Major | A minor'},
+  {label:'♯×1 - G Major | E minor',      acc:1,  scale:[0,2,4,6,7,9,11],   flat:false, maj:'G',  min:'Em',  badge:'G Major | E minor'},
+  {label:'♯×2 - D Major | B minor',      acc:2,  scale:[1,2,4,6,7,9,11],   flat:false, maj:'D',  min:'Bm',  badge:'D Major | B minor'},
+  {label:'♯×3 - A Major | F♯ minor',     acc:3,  scale:[1,2,4,6,8,9,11],   flat:false, maj:'A',  min:'F♯m', badge:'A Major | F♯ minor'},
+  {label:'♯×4 - E Major | C♯ minor',     acc:4,  scale:[1,3,4,6,8,9,11],   flat:false, maj:'E',  min:'C♯m', badge:'E Major | C♯ minor'},
+  {label:'♯×5 - B Major | G♯ minor',     acc:5,  scale:[1,3,4,6,8,10,11],  flat:false, maj:'B',  min:'G♯m', badge:'B Major | G♯ minor'},
+  {label:'♯×6 - F♯ Major | D♯ minor',    acc:6,  scale:[1,3,5,6,8,10,11],  flat:false, maj:'F♯', min:'D♯m', badge:'F♯ Major | D♯ minor'},
+  {label:'♭×1 - F Major | D minor',      acc:-1, scale:[0,2,4,5,7,9,10],   flat:true,  maj:'F',  min:'Dm',  badge:'F Major | D minor'},
+  {label:'♭×2 - B♭ Major | G minor',     acc:-2, scale:[0,2,3,5,7,9,10],   flat:true,  maj:'B♭', min:'Gm',  badge:'B♭ Major | G minor'},
+  {label:'♭×3 - E♭ Major | C minor',     acc:-3, scale:[0,2,3,5,7,8,10],   flat:true,  maj:'E♭', min:'Cm',  badge:'E♭ Major | C minor'},
+  {label:'♭×4 - A♭ Major | F minor',     acc:-4, scale:[0,1,3,5,7,8,10],   flat:true,  maj:'A♭', min:'Fm',  badge:'A♭ Major | F minor'},
+  {label:'♭×5 - D♭ Major | B♭ minor',    acc:-5, scale:[0,1,3,5,6,8,10],   flat:true,  maj:'D♭', min:'B♭m', badge:'D♭ Major | B♭ minor'},
+  {label:'♭×6 - G♭ Major | E♭ minor',    acc:-6, scale:[1,3,5,6,8,10,11],  flat:true,  maj:'G♭', min:'E♭m', badge:'G♭ Major | E♭ minor'},
 ];
 let currentKey=KEY_SIGS[0];
 const ksel=document.getElementById('key-select');
@@ -213,7 +218,8 @@ function noteName(n,flat){
 }
 function sliceLabel(n){
   if(!BLACK.has(n))return NOTES[n].shp;
-  if(currentKey.acc===null)return NOTES[n].shp+' | '+NOTES[n].flt;
+  // null=atonal, 0=C Major: both sides shown
+  if(currentKey.acc===null||currentKey.acc===0)return NOTES[n].shp+' | '+NOTES[n].flt;
   return currentKey.flat?NOTES[n].flt:NOTES[n].shp;
 }
 function fmtRoot(n,s,flat){
@@ -248,10 +254,26 @@ const CHORDS=[
   {s:'7sus4',iv:[0,5,7,10],l:'7sus4',pri:13},{s:'7♭5',iv:[0,4,6,10],l:'Dom 7♭5',pri:14},
   {s:'7♯9',iv:[0,3,4,7,10],l:'7♯9 Jimi',pri:15},
   {s:'9',iv:[0,2,4,7,10],l:'Dom 9th',pri:1},{s:'M9',iv:[0,2,4,7,11],l:'Major 9th',pri:2},
-  {s:'m9',iv:[0,2,3,7,10],l:'Minor 9th',pri:3},{s:'6/9',iv:[0,2,4,7,9],l:'6/9',pri:4},
+  {s:'m9',iv:[0,2,3,7,10],l:'Minor 9th',pri:3},{s:'m69',iv:[0,2,3,7,9],l:'m6/9',pri:4},{s:'69',iv:[0,2,4,7,9],l:'6/9',pri:4},
   {s:'7♭9',iv:[0,1,4,7,10],l:'Dom 7♭9',pri:5},{s:'7♯11',iv:[0,4,6,7,10],l:'7♯11',pri:7},
   {s:'M7♯11',iv:[0,4,6,7,11],l:'Maj7♯11',pri:8},{s:'m9♭5',iv:[0,2,3,6,10],l:'m9♭5',pri:9},
   {s:'add11',iv:[0,4,5,7],l:'Add11',pri:11},{s:'madd11',iv:[0,3,5,7],l:'m Add11',pri:12},
+  {s:'11',     iv:[0,4,7,10,2,5],  l:'Dom 11th',   pri:3},
+  {s:'m11',    iv:[0,3,7,10,2,5],  l:'Minor 11th', pri:4},
+  {s:'M11',    iv:[0,4,7,11,2,5],  l:'Major 11th', pri:5},
+  {s:'13',     iv:[0,4,7,10,2,9],  l:'Dom 13th',   pri:3},
+  {s:'m13',    iv:[0,3,7,10,2,9],  l:'Minor 13th', pri:4},
+  {s:'M13',    iv:[0,4,7,11,2,9],  l:'Major 13th', pri:5},
+  {s:'9♯11',   iv:[0,4,7,10,2,6],  l:'9♯11',   pri:6},
+  {s:'M9♯11',  iv:[0,4,7,11,2,6],  l:'Maj9♯11', pri:7},
+  {s:'7♭9♯11',iv:[0,4,7,10,1,6],l:'7♭9♯11', pri:8},
+  {s:'7♯9♯11',iv:[0,4,7,10,3,6],l:'7♯9♯11', pri:9},
+  {s:'13♭9',  iv:[0,4,7,10,1,9],  l:'13♭9',   pri:10},
+  {s:'13♯9',  iv:[0,4,7,10,3,9],  l:'13♯9',   pri:11},
+  {s:'13♯11', iv:[0,4,7,10,6,9],  l:'13♯11',  pri:12},
+  {s:'m7add11',iv:[0,3,7,10,5],    l:'m7 add11',   pri:13},
+  {s:'7add13', iv:[0,4,7,10,9],    l:'7 add13',    pri:13},
+  {s:'m9add11',iv:[0,3,7,10,2,5],  l:'m9 add11',   pri:14},
 ];
 const SDB={};
 CHORDS.forEach(ch=>{
@@ -274,17 +296,14 @@ const activeNodes=new Map();
 function getAC(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
-    // DynamicsCompressor: prevents volume fluctuation on iOS/Safari
-    // when multiple voices play simultaneously
     compressor=actx.createDynamicsCompressor();
-    compressor.threshold.value=-18;  // dB
-    compressor.knee.value=6;
-    compressor.ratio.value=4;
-    compressor.attack.value=0.003;
-    compressor.release.value=0.25;
+    compressor.threshold.value=-16;
+    compressor.knee.value=8;
+    compressor.ratio.value=3;
+    compressor.attack.value=0.001;
+    compressor.release.value=0.15;
     masterGain=actx.createGain();
-    masterGain.gain.value=0.78;
-    // chain: osc -> gainNode -> compressor -> masterGain -> destination
+    masterGain.gain.value=0.75;
     compressor.connect(masterGain);
     masterGain.connect(actx.destination);
   }
@@ -292,9 +311,7 @@ function getAC(){
   return actx;
 }
 
-// Fixed per-voice gain — do NOT scale by voice count.
-// Compressor handles loudness normalisation instead.
-const VOICE_GAIN=0.22;
+const VOICE_GAIN=0.20;
 
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
@@ -302,45 +319,44 @@ function stopNote(n,imm){
   activeNodes.delete(n);
   const t=actx.currentTime;
   gain.gain.cancelScheduledValues(t);
+  // Read current value at exact now — prevents discontinuity pop
   gain.gain.setValueAtTime(gain.gain.value,t);
-  const fadeMs=imm?0.012:1.8;
+  const fadeMs=imm?0.15:0.8;  // 150ms release on play-mode note-off
   gain.gain.linearRampToValueAtTime(0.0001,t+fadeMs);
   try{osc.stop(t+fadeMs+0.02);}catch(e){}
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 
-// holdMode=true  -> Play mode (sustain until stopNote)
-// holdMode=false -> Analyze mode (auto-release envelope)
 function _playOsc(n,semitone,holdMode){
   const ac=getAC();
   const freq=442*Math.pow(2,(semitone-9)/12);
   const gv=VOICE_GAIN;
-  const t=ac.currentTime+0.015;
+  const t=ac.currentTime+0.05;
 
   const osc=ac.createOscillator();
   const gain=ac.createGain();
-  osc.type='triangle';
+  osc.type='sine';
   osc.frequency.value=freq;
 
-  // Attack: always ramp from 0 to avoid click
-  gain.gain.setValueAtTime(0.0001,t);
-  gain.gain.linearRampToValueAtTime(gv,t+0.018);
-
   if(holdMode){
-    // Play mode: very short decay (piano-like percussive)
-    gain.gain.setValueAtTime(gv,t+0.018);
-    gain.gain.linearRampToValueAtTime(gv*0.45,t+0.12); // fast initial decay
-    gain.gain.linearRampToValueAtTime(0.0001,t+0.55);  // complete silence
+    // Play mode:
+    // Ultra-fast attack (5ms) so note is at full volume almost instantly.
+    // Then gentle decay while held. stopNote() cuts with 150ms fade on release.
+    gain.gain.setValueAtTime(0.0001,t);
+    gain.gain.linearRampToValueAtTime(gv,t+0.005);    // 5ms attack → peak
+    gain.gain.setValueAtTime(gv,t+0.005);
+    gain.gain.linearRampToValueAtTime(gv*0.70,t+0.4); // natural decay
+    gain.gain.linearRampToValueAtTime(gv*0.50,t+1.5); // sustain level
     osc.connect(gain);gain.connect(compressor);
-    osc.start(t);osc.stop(t+0.6); // safety ceiling
+    osc.start(t);osc.stop(t+30);
   } else {
-    // Analyze mode: ADSR auto-release ~3 seconds
-    gain.gain.setValueAtTime(gv,t+0.018);
-    gain.gain.linearRampToValueAtTime(gv*0.6,t+0.8);
-    gain.gain.linearRampToValueAtTime(gv*0.15,t+2.4);
-    gain.gain.linearRampToValueAtTime(0.0001,t+3.6);
+    // Analyze mode: fast attack, long auto-release
+    gain.gain.setValueAtTime(0.0001,t);
+    gain.gain.linearRampToValueAtTime(gv,t+0.010);    // 10ms attack
+    gain.gain.setValueAtTime(gv,t+0.010);
+    gain.gain.linearRampToValueAtTime(0.0001,t+3.5);  // slow decay
     osc.connect(gain);gain.connect(compressor);
-    osc.start(t);osc.stop(t+3.7);
+    osc.start(t);osc.stop(t+3.6);
   }
   activeNodes.set(n,{osc,gain});
 }
@@ -412,7 +428,26 @@ function mkT(x,y,txt,sz,fill,anchor,weight){
   t.setAttribute('dominant-baseline','central');
   t.setAttribute('font-size',sz);t.setAttribute('fill',fill);
   if(weight)t.setAttribute('font-weight',weight);
-  t.textContent=txt;return t;
+  // Render " | " separator with thin weight for enharmonic display
+  if(txt.includes(' | ')){
+    const parts=txt.split(' | ');
+    parts.forEach((part,i)=>{
+      const ts=document.createElementNS(NS,'tspan');
+      ts.textContent=part;
+      if(weight)ts.setAttribute('font-weight',weight);
+      t.appendChild(ts);
+      if(i<parts.length-1){
+        const sep=document.createElementNS(NS,'tspan');
+        sep.textContent=' | ';
+        sep.setAttribute('font-weight','300');
+        sep.setAttribute('fill',fill==='var(--color-text-primary)'||fill==='#e8e4dc'?'#666':fill);
+        t.appendChild(sep);
+      }
+    });
+  } else {
+    t.textContent=txt;
+  }
+  return t;
 }
 
 function renderSlices(){
@@ -532,8 +567,12 @@ function renderCenter(){
     g.appendChild(mkT(cx,cy,'tap to play','11',TEXT_OR));
     svg.appendChild(g);return;
   }
-  if(sel.length<=2){
-    g.appendChild(mkT(cx,cy,sel.length+' note(s)','13',TEXT_SUB));
+  if(sel.length===1){
+    g.appendChild(mkT(cx,cy,'1 note','14',TEXT_SUB));
+    svg.appendChild(g);return;
+  }
+  if(sel.length===2){
+    g.appendChild(mkT(cx,cy,'2 notes','13',TEXT_SUB));
     svg.appendChild(g);return;
   }
   const hits=detect(sel);
@@ -587,7 +626,8 @@ function updateResults(){
       const chName=fmtRoot(h.root,h.s,flat);
       const{names,ivs}=buildNoteIvStr(sel,h.root,flat,h.s);
       const div=document.createElement('div');div.className='result-block';
-      div.innerHTML=`<div class="rb-chord">${chName}</div><div class="rb-notes">${names}</div><div class="rb-ivs">${ivs}</div>`;
+      const chDisp=chName.replace(/ \| /g,'<span style="font-weight:300;color:#555"> | </span>');
+      div.innerHTML=`<div class="rb-chord">${chDisp}</div><div class="rb-notes">${names}</div><div class="rb-ivs">${ivs}</div>`;
       area.appendChild(div);
     });
     slEl.textContent='';slistEl.innerHTML='';
@@ -597,7 +637,7 @@ function updateResults(){
     else if(sel.length>=3&&hits.length===0){sugsFor=getSugs(sel);slEl.textContent=sugsFor.length?'Add one more note…':'Unidentified';}
     else{slEl.textContent='';}
     if(sugsFor&&sugsFor.length>0){
-      slistEl.innerHTML=sugsFor.map(s=>{const flat=useFlat(s.root,s.s);return`<span class="sug-tag">${fmtRoot(s.root,s.s,flat)}</span>`;}).join('');
+      slistEl.innerHTML=sugsFor.map(s=>{const flat=useFlat(s.root,s.s);const rn=fmtRoot(s.root,s.s,flat).replace(' | ','<span style="font-weight:300;color:#444"> | </span>');return`<span class="sug-tag">${rn}</span>`;}).join('');
       sugsFor.forEach(s=>{
         for(let n=0;n<12;n++){
           if(selected.has(n))continue;
@@ -633,10 +673,8 @@ function playModePress(n){
   if(playActive.has(n))return;
   playActive.set(n,true);
   selected.add(n);
-  const hits=detect(Array.from(selected));
-  const root=hits.length>0?hits[0].root:[...selected][0];
-  const semitone=n+(n<root?12:0);
-  _playOsc(n,semitone,true); // holdMode=true
+  // Play mode: no inversion — play each note in same octave (C4 range)
+  _playOsc(n,n,true); // holdMode=true, no octave shift
   updateAll();
 }
 
@@ -644,7 +682,7 @@ function playModeRelease(n){
   if(!playActive.has(n))return;
   playActive.delete(n);
   selected.delete(n);
-  stopNote(n,false); // gentle fade
+  stopNote(n,true); // immediate short fade on release
   updateAll();
 }
 
@@ -719,15 +757,25 @@ function initMIDI(){
 initMIDI();
 
 // ===================== INIT =====================
-// iOS Safari: AudioContext must be resumed on user gesture
-// Also prevents volume fluctuation from audio session conflicts
 ['touchstart','pointerdown','keydown'].forEach(evt=>{
   document.addEventListener(evt,()=>{
+    // Eagerly create and resume AudioContext on first interaction
+    // This prevents scheduling-in-the-past delay on first note
+    if(!actx) getAC();
     if(actx&&actx.state==='suspended')actx.resume().catch(()=>{});
   },{once:false,passive:true});
 });
 
-renderSlices();renderCenter();
+// Wrap in DOMContentLoaded for Android Chrome compatibility
+function init(){
+  try{renderSlices();}catch(e){console.error('renderSlices:',e);}
+  try{renderCenter();}catch(e){console.error('renderCenter:',e);}
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',init);
+}else{
+  init();
+}
 </script>
 </body>
 </html>
