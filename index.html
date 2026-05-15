@@ -24,30 +24,43 @@ html,body{
   min-height:100%;
   width:100%;
 }
-#key-selector{
-  width:100%;max-width:100vw;
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+#top-bar{
+  width:100%;
+  display:flex;align-items:center;justify-content:center;
+  gap:28px;flex-wrap:wrap;
   padding:6px 12px;
   background:#2a2a2e;
   border-bottom:1px solid #3a3a3e;
   margin-bottom:4px;
 }
-#key-selector label{font-size:11px;color:#888;white-space:nowrap}
-#key-select{
-  font-size:12px;padding:4px 8px;border-radius:6px;
-  border:1px solid #444;background:#333;color:#e8e4dc;
-  cursor:pointer;flex:1;min-width:160px;max-width:300px;
+#key-selector{
+  display:flex;align-items:center;gap:6px;
 }
-#key-badge{font-size:11px;color:#aaa;white-space:nowrap}
+#key-selector label{font-size:11px;color:#666;white-space:nowrap;font-weight:600;letter-spacing:.4px}
+#key-select{
+  font-size:12px;padding:5px 10px;border-radius:18px;
+  border:1px solid #444;background:#2a2a2e;color:#666;
+  cursor:pointer;min-width:140px;max-width:220px;
+  font-weight:600;letter-spacing:.3px;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:28px;
+  transition:background .15s,color .15s,border-color .15s;
+}
+#key-select.key-active{
+  background:#4A90D9;color:#fff;border-color:#4A90D9;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23fff'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+#key-badge{display:none}
 #svg-wrap{
   width:100%;
   padding:0 4px;
-  /* Desktop: limit pizza height so everything fits in viewport */
-  max-width:min(100vw, 54vh);
+  max-width:min(98vw, 62vh);
 }
 @media(max-width:600px){
-  /* Mobile/tablet portrait: use more width */
-  #svg-wrap{max-width:min(100vw,96vw);}
+  #svg-wrap{max-width:98vw;}
 }
 #pizza{width:100%;height:auto;display:block}
 #results-area{width:100%;padding:4px 10px}
@@ -66,11 +79,7 @@ html,body{
   font-size:12px;color:#aaa;background:#2a2a2e;
   border-radius:5px;padding:3px 9px;border:1px solid #3a3a3e;
 }
-/* Mode toggle */
-#mode-bar{
-  width:100%;display:flex;justify-content:center;
-  padding:6px 12px 2px;gap:0;
-}
+/* Mode toggle (inside top-bar) */
 #mode-toggle{
   display:flex;background:#2a2a2e;border-radius:20px;
   border:1px solid #444;overflow:hidden;
@@ -90,15 +99,15 @@ body.play-mode .rb-chord{color:#7ec8f0}
 </head>
 <body>
 <div id="app">
-  <div id="key-selector">
-    <label>Key: </label>
-    <select id="key-select"></select>
-    <span id="key-badge">—</span>
-  </div>
-  <div id="mode-bar">
+  <div id="top-bar">
     <div id="mode-toggle">
       <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">Analyze</button>
       <button class="mode-btn"        id="btn-play"    onclick="setMode('play')">Play</button>
+    </div>
+    <div id="key-selector">
+      <label>Key: </label>
+      <select id="key-select"></select>
+      <span id="key-badge">—</span>
     </div>
   </div>
   <div id="svg-wrap"><svg id="pizza" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg" width="680" height="680" style="width:100%;height:auto"></svg></div>
@@ -165,7 +174,8 @@ const ksel=document.getElementById('key-select');
 KEY_SIGS.forEach((k,i)=>{const o=document.createElement('option');o.value=i;o.textContent=k.label;ksel.appendChild(o);});
 ksel.addEventListener('change',()=>{
   currentKey=KEY_SIGS[+ksel.value];
-  document.getElementById('key-badge').textContent=currentKey.badge;
+  // Blue highlight when a key is selected (index 0 = atonal = no highlight)
+  ksel.classList.toggle('key-active', +ksel.value !== 0);
   renderSlices();
 });
 
@@ -258,75 +268,79 @@ CHORDS.forEach(ch=>{
 // ===================== AUDIO =====================
 let actx=null;
 let masterGain=null;
+let compressor=null;
 const activeNodes=new Map();
 
 function getAC(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+    // DynamicsCompressor: prevents volume fluctuation on iOS/Safari
+    // when multiple voices play simultaneously
+    compressor=actx.createDynamicsCompressor();
+    compressor.threshold.value=-18;  // dB
+    compressor.knee.value=6;
+    compressor.ratio.value=4;
+    compressor.attack.value=0.003;
+    compressor.release.value=0.25;
     masterGain=actx.createGain();
-    masterGain.gain.value=0.82;
+    masterGain.gain.value=0.78;
+    // chain: osc -> gainNode -> compressor -> masterGain -> destination
+    compressor.connect(masterGain);
     masterGain.connect(actx.destination);
   }
   if(actx.state==='suspended')actx.resume().catch(()=>{});
   return actx;
 }
 
-// Per-voice gain: scale down with more simultaneous voices
-function vGain(n){return Math.max(0.07,0.26/Math.sqrt(Math.max(1,n)));}
+// Fixed per-voice gain — do NOT scale by voice count.
+// Compressor handles loudness normalisation instead.
+const VOICE_GAIN=0.22;
 
-// Safely stop a note: always read current gain value then ramp to silence
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
   const{osc,gain}=activeNodes.get(n);
-  activeNodes.delete(n); // remove first to prevent double-stop
+  activeNodes.delete(n);
   const t=actx.currentTime;
-  const cur=gain.gain.value;
   gain.gain.cancelScheduledValues(t);
-  // setValueAtTime at exact now prevents discontinuity jump
-  gain.gain.setValueAtTime(Math.max(cur,1e-5),t);
-  const fadeTime=imm?0.010:2.4;
-  // linearRamp is more stable than exponential across browsers (Safari/Android)
-  gain.gain.linearRampToValueAtTime(1e-5,t+fadeTime);
-  try{osc.stop(t+fadeTime+0.02);}catch(e){}
+  gain.gain.setValueAtTime(gain.gain.value,t);
+  const fadeMs=imm?0.012:1.8;
+  gain.gain.linearRampToValueAtTime(0.0001,t+fadeMs);
+  try{osc.stop(t+fadeMs+0.02);}catch(e){}
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 
-// Single-note play function (low-level)
-// semitone: absolute (e.g. 0=C4, 12=C5)
-// voices: total simultaneous voices for gain scaling
-// holdMode: if true, sustain until stopNote is called (Play mode)
-function _playOsc(n,semitone,voices,holdMode){
+// holdMode=true  -> Play mode (sustain until stopNote)
+// holdMode=false -> Analyze mode (auto-release envelope)
+function _playOsc(n,semitone,holdMode){
   const ac=getAC();
   const freq=442*Math.pow(2,(semitone-9)/12);
-  const gv=vGain(voices);
-  const t=ac.currentTime+0.012; // tiny scheduling gap prevents clicks
+  const gv=VOICE_GAIN;
+  const t=ac.currentTime+0.015;
 
   const osc=ac.createOscillator();
   const gain=ac.createGain();
   osc.type='triangle';
   osc.frequency.value=freq;
 
+  // Attack: always ramp from 0 to avoid click
+  gain.gain.setValueAtTime(0.0001,t);
+  gain.gain.linearRampToValueAtTime(gv,t+0.018);
+
   if(holdMode){
-    // Play mode: attack only, hold until released
-    gain.gain.setValueAtTime(1e-5,t);
-    gain.gain.linearRampToValueAtTime(gv,t+0.016);
-    // gentle decay while held (natural piano feel)
-    gain.gain.setValueAtTime(gv,t+0.016);
-    gain.gain.linearRampToValueAtTime(gv*0.65,t+2.0);
-    gain.gain.linearRampToValueAtTime(gv*0.5,t+8.0);
-    osc.connect(gain);gain.connect(masterGain);
-    osc.start(t);osc.stop(t+8.2);
+    // Play mode: very short decay (piano-like percussive)
+    gain.gain.setValueAtTime(gv,t+0.018);
+    gain.gain.linearRampToValueAtTime(gv*0.45,t+0.12); // fast initial decay
+    gain.gain.linearRampToValueAtTime(0.0001,t+0.55);  // complete silence
+    osc.connect(gain);gain.connect(compressor);
+    osc.start(t);osc.stop(t+0.6); // safety ceiling
   } else {
-    // Analyze mode: full ADSR, auto-release
-    gain.gain.setValueAtTime(1e-5,t);
-    gain.gain.linearRampToValueAtTime(gv,t+0.016);
-    gain.gain.setValueAtTime(gv,t+0.016);
-    // Use linearRamp instead of exponential for cross-browser stability
-    gain.gain.linearRampToValueAtTime(gv*0.55,t+0.9);
-    gain.gain.linearRampToValueAtTime(gv*0.12,t+2.6);
-    gain.gain.linearRampToValueAtTime(1e-5,t+3.8);
-    osc.connect(gain);gain.connect(masterGain);
-    osc.start(t);osc.stop(t+3.85);
+    // Analyze mode: ADSR auto-release ~3 seconds
+    gain.gain.setValueAtTime(gv,t+0.018);
+    gain.gain.linearRampToValueAtTime(gv*0.6,t+0.8);
+    gain.gain.linearRampToValueAtTime(gv*0.15,t+2.4);
+    gain.gain.linearRampToValueAtTime(0.0001,t+3.6);
+    osc.connect(gain);gain.connect(compressor);
+    osc.start(t);osc.stop(t+3.7);
   }
   activeNodes.set(n,{osc,gain});
 }
@@ -337,10 +351,7 @@ function playSelected(){
   const hits=detect(sel);
   const root=hits.length>0?hits[0].root:sel[0];
   stopAll(true);
-  sel.forEach(n=>{
-    const semitone=n+(n<root?12:0);
-    _playOsc(n,semitone,sel.length,false);
-  });
+  sel.forEach(n=>_playOsc(n,n+(n<root?12:0),false));
 }
 
 // ===================== DETECTION =====================
@@ -625,7 +636,7 @@ function playModePress(n){
   const hits=detect(Array.from(selected));
   const root=hits.length>0?hits[0].root:[...selected][0];
   const semitone=n+(n<root?12:0);
-  _playOsc(n,semitone,selected.size,true); // holdMode=true
+  _playOsc(n,semitone,true); // holdMode=true
   updateAll();
 }
 
