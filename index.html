@@ -20,8 +20,8 @@ html,body{
 }
 #app{
   display:flex;flex-direction:column;align-items:center;
-  padding:10px 0 20px;
-  min-height:100vh;
+  padding:6px 0 12px;
+  min-height:100%;
   width:100%;
 }
 #key-selector{
@@ -39,17 +39,26 @@ html,body{
   cursor:pointer;flex:1;min-width:160px;max-width:300px;
 }
 #key-badge{font-size:11px;color:#aaa;white-space:nowrap}
-#svg-wrap{width:100%;padding:0 4px}
+#svg-wrap{
+  width:100%;
+  padding:0 4px;
+  /* Desktop: limit pizza height so everything fits in viewport */
+  max-width:min(100vw, 54vh);
+}
+@media(max-width:600px){
+  /* Mobile/tablet portrait: use more width */
+  #svg-wrap{max-width:min(100vw,96vw);}
+}
 #pizza{width:100%;height:auto;display:block}
 #results-area{width:100%;padding:4px 10px}
 .result-block{
-  margin-bottom:7px;padding:7px 12px;border-radius:8px;
+  margin-bottom:5px;padding:5px 10px;border-radius:7px;
   background:#2a2a2e;border:1px solid #3a3a3e;
 }
 .result-block:first-child{border-color:#4a7aae;background:#252830}
-.rb-chord{font-size:21px;font-weight:700;color:#e8e4dc;margin-bottom:2px}
-.rb-notes{font-size:11px;color:#888}
-.rb-ivs{font-size:11px;color:#555;letter-spacing:.2px}
+.rb-chord{font-size:18px;font-weight:700;color:#e8e4dc;margin-bottom:1px}
+.rb-notes{font-size:10px;color:#888}
+.rb-ivs{font-size:10px;color:#555;letter-spacing:.2px}
 #suggestions{width:100%;min-height:40px;padding:4px 10px;text-align:center}
 #sug-label{font-size:10px;color:#666;margin-bottom:4px}
 #sug-list{display:flex;flex-wrap:wrap;gap:5px;justify-content:center}
@@ -92,7 +101,7 @@ body.play-mode .rb-chord{color:#7ec8f0}
       <button class="mode-btn"        id="btn-play"    onclick="setMode('play')">Play</button>
     </div>
   </div>
-  <div id="svg-wrap"><svg id="pizza" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div id="svg-wrap"><svg id="pizza" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg" width="680" height="680" style="width:100%;height:auto"></svg></div>
   <div id="results-area"></div>
   <div id="suggestions"><div id="sug-label"></div><div id="sug-list"></div></div>
 </div>
@@ -248,7 +257,6 @@ CHORDS.forEach(ch=>{
 
 // ===================== AUDIO =====================
 let actx=null;
-// master gain to prevent overall clipping
 let masterGain=null;
 const activeNodes=new Map();
 
@@ -256,102 +264,82 @@ function getAC(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
     masterGain=actx.createGain();
-    masterGain.gain.value=0.85;
+    masterGain.gain.value=0.82;
     masterGain.connect(actx.destination);
   }
+  if(actx.state==='suspended')actx.resume().catch(()=>{});
   return actx;
 }
-function vGain(n){return Math.max(0.07,0.28/Math.sqrt(Math.max(1,n)));}
 
-// Schedule a gain ramp safely: read actual current value, avoid scheduling in past
-function safeRamp(gainParam, targetVal, duration){
-  const ac=actx;
-  const t=ac.currentTime;
-  // Always read current value and re-set to avoid discontinuity
-  const cur=gainParam.value;
-  gainParam.cancelScheduledValues(t);
-  gainParam.setValueAtTime(cur,t);
-  if(duration<=0){
-    gainParam.setValueAtTime(Math.max(targetVal,1e-5),t+0.001);
-  } else {
-    gainParam.linearRampToValueAtTime(Math.max(targetVal,1e-5),t+duration);
-  }
-}
+// Per-voice gain: scale down with more simultaneous voices
+function vGain(n){return Math.max(0.07,0.26/Math.sqrt(Math.max(1,n)));}
 
+// Safely stop a note: always read current gain value then ramp to silence
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
   const{osc,gain}=activeNodes.get(n);
+  activeNodes.delete(n); // remove first to prevent double-stop
   const t=actx.currentTime;
   const cur=gain.gain.value;
   gain.gain.cancelScheduledValues(t);
+  // setValueAtTime at exact now prevents discontinuity jump
   gain.gain.setValueAtTime(Math.max(cur,1e-5),t);
-  const fadeTime=imm?0.008:2.8;
+  const fadeTime=imm?0.010:2.4;
+  // linearRamp is more stable than exponential across browsers (Safari/Android)
   gain.gain.linearRampToValueAtTime(1e-5,t+fadeTime);
-  try{osc.stop(t+fadeTime+0.01);}catch(e){}
-  activeNodes.delete(n);
+  try{osc.stop(t+fadeTime+0.02);}catch(e){}
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 
-function playNote(semitone,totalVoices){
+// Single-note play function (low-level)
+// semitone: absolute (e.g. 0=C4, 12=C5)
+// voices: total simultaneous voices for gain scaling
+// holdMode: if true, sustain until stopNote is called (Play mode)
+function _playOsc(n,semitone,voices,holdMode){
   const ac=getAC();
-  if(ac.state==='suspended')ac.resume().catch(()=>{});
   const freq=442*Math.pow(2,(semitone-9)/12);
-  const gv=vGain(totalVoices);
-  const t=ac.currentTime;
+  const gv=vGain(voices);
+  const t=ac.currentTime+0.012; // tiny scheduling gap prevents clicks
 
   const osc=ac.createOscillator();
   const gain=ac.createGain();
   osc.type='triangle';
   osc.frequency.value=freq;
 
-  // Ramp from 0 -> peak -> sustain -> silence
-  gain.gain.setValueAtTime(1e-5,t);
-  gain.gain.linearRampToValueAtTime(gv,t+0.018);       // attack
-  gain.gain.setValueAtTime(gv,t+0.018);
-  gain.gain.exponentialRampToValueAtTime(gv*0.42,t+1.0); // decay
-  gain.gain.exponentialRampToValueAtTime(1e-5,t+3.8);    // release
-
-  osc.connect(gain);
-  gain.connect(masterGain);
-  osc.start(t);
-  osc.stop(t+3.85);
-
-  return {osc,gain};
+  if(holdMode){
+    // Play mode: attack only, hold until released
+    gain.gain.setValueAtTime(1e-5,t);
+    gain.gain.linearRampToValueAtTime(gv,t+0.016);
+    // gentle decay while held (natural piano feel)
+    gain.gain.setValueAtTime(gv,t+0.016);
+    gain.gain.linearRampToValueAtTime(gv*0.65,t+2.0);
+    gain.gain.linearRampToValueAtTime(gv*0.5,t+8.0);
+    osc.connect(gain);gain.connect(masterGain);
+    osc.start(t);osc.stop(t+8.2);
+  } else {
+    // Analyze mode: full ADSR, auto-release
+    gain.gain.setValueAtTime(1e-5,t);
+    gain.gain.linearRampToValueAtTime(gv,t+0.016);
+    gain.gain.setValueAtTime(gv,t+0.016);
+    // Use linearRamp instead of exponential for cross-browser stability
+    gain.gain.linearRampToValueAtTime(gv*0.55,t+0.9);
+    gain.gain.linearRampToValueAtTime(gv*0.12,t+2.6);
+    gain.gain.linearRampToValueAtTime(1e-5,t+3.8);
+    osc.connect(gain);gain.connect(masterGain);
+    osc.start(t);osc.stop(t+3.85);
+  }
+  activeNodes.set(n,{osc,gain});
 }
 
 function playSelected(){
   const sel=Array.from(selected).sort((a,b)=>a-b);
   if(!sel.length)return;
-  const ac=getAC();
-  if(ac.state==='suspended')ac.resume().catch(()=>{});
   const hits=detect(sel);
   const root=hits.length>0?hits[0].root:sel[0];
-
   stopAll(true);
-  // Brief pause after stop to let gain ramps settle before new notes
-  const startDelay=0.025;
   sel.forEach(n=>{
-    const semitone=n+(n<root?12:0); // root is lowest octave
-    const t=ac.currentTime+startDelay;
-    const gv=vGain(sel.length);
-
-    const osc=ac.createOscillator();
-    const gain=ac.createGain();
-    osc.type='triangle';
-    osc.frequency.value=442*Math.pow(2,(semitone-9)/12);
-
-    gain.gain.setValueAtTime(1e-5,t);
-    gain.gain.linearRampToValueAtTime(gv,t+0.018);
-    gain.gain.setValueAtTime(gv,t+0.018);
-    gain.gain.exponentialRampToValueAtTime(gv*0.42,t+1.0);
-    gain.gain.exponentialRampToValueAtTime(1e-5,t+3.8);
-
-    osc.connect(gain);
-    gain.connect(masterGain);
-    osc.start(t);
-    osc.stop(t+3.85);
-
-    activeNodes.set(n,{osc,gain});
+    const semitone=n+(n<root?12:0);
+    _playOsc(n,semitone,sel.length,false);
   });
 }
 
@@ -631,30 +619,13 @@ function setMode(mode){
 }
 
 function playModePress(n){
-  if(playActive.has(n))return; // already held
+  if(playActive.has(n))return;
   playActive.set(n,true);
   selected.add(n);
-  // Play this note + update chord display (don't replay all — just add)
-  const ac=getAC();
-  if(ac.state==='suspended')ac.resume().catch(()=>{});
   const hits=detect(Array.from(selected));
   const root=hits.length>0?hits[0].root:[...selected][0];
   const semitone=n+(n<root?12:0);
-  const gv=vGain(selected.size);
-  const t=ac.currentTime+0.005;
-  const osc=ac.createOscillator();
-  const gain=ac.createGain();
-  osc.type='triangle';
-  osc.frequency.value=442*Math.pow(2,(semitone-9)/12);
-  gain.gain.setValueAtTime(1e-5,t);
-  gain.gain.linearRampToValueAtTime(gv,t+0.015);
-  // sustain indefinitely (will be cut on release)
-  gain.gain.setValueAtTime(gv,t+0.015);
-  gain.gain.exponentialRampToValueAtTime(gv*0.6,t+1.5);
-  gain.gain.exponentialRampToValueAtTime(1e-5,t+8.0);
-  osc.connect(gain);gain.connect(masterGain);
-  osc.start(t);osc.stop(t+8.1);
-  activeNodes.set(n,{osc,gain});
+  _playOsc(n,semitone,selected.size,true); // holdMode=true
   updateAll();
 }
 
@@ -713,13 +684,21 @@ function initMIDI(){
       const cmd=status&0xf0;
       const pc=note%12;
       if(cmd===0x90&&vel>0){
-        // Note on: toggle on (if already on, turn off)
-        if(selected.has(pc)){selected.delete(pc);stopNote(pc,true);}
-        else{selected.add(pc);playSelected();}
-        updateAll();
+        if(currentMode==='play'){
+          // Play mode: press = hold note
+          if(!playActive.has(pc))playModePress(pc);
+        } else {
+          // Analyze mode: toggle
+          if(selected.has(pc)){selected.delete(pc);stopNote(pc,true);}
+          else{selected.add(pc);playSelected();}
+          updateAll();
+        }
       } else if(cmd===0x80||(cmd===0x90&&vel===0)){
-        // Note off: deselect
-        if(selected.has(pc)){selected.delete(pc);stopNote(pc,true);updateAll();}
+        if(currentMode==='play'){
+          // Play mode: release = stop note
+          playModeRelease(pc);
+        }
+        // Analyze mode: Note Off ignored (notes stay selected)
       }
     }
     function connect(m){m.inputs.forEach(inp=>inp.onmidimessage=onMsg);}
@@ -729,6 +708,14 @@ function initMIDI(){
 initMIDI();
 
 // ===================== INIT =====================
+// iOS Safari: AudioContext must be resumed on user gesture
+// Also prevents volume fluctuation from audio session conflicts
+['touchstart','pointerdown','keydown'].forEach(evt=>{
+  document.addEventListener(evt,()=>{
+    if(actx&&actx.state==='suspended')actx.resume().catch(()=>{});
+  },{once:false,passive:true});
+});
+
 renderSlices();renderCenter();
 </script>
 </body>
