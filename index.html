@@ -124,36 +124,39 @@ body.play-mode .rb-chord{color:#7ec8f0}
 </div>
 <script>
 // ===================== PWA INLINE =====================
+// PWA setup — fully wrapped in try/catch so ANY error here
+// cannot block the main app from rendering on Android Chrome
 (function(){
-  // Inline SVG icon as data URL for apple-touch-icon
-  const iconSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" rx="36" fill="#1c1c1e"/><circle cx="90" cy="90" r="72" fill="none" stroke="#4A90D9" stroke-width="4"/><text x="90" y="100" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,sans-serif" font-size="44" font-weight="700" fill="#4A90D9">C-C</text></svg>`;
-  const iconUrl='data:image/svg+xml;base64,'+btoa(iconSvg);
+  try{
+    // Safe btoa for SVG (encode to percent-encoding first)
+    const iconSvg='<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" rx="36" fill="%231c1c1e"/><circle cx="90" cy="90" r="72" fill="none" stroke="%234A90D9" stroke-width="4"/><text x="90" y="100" text-anchor="middle" dominant-baseline="central" font-size="44" font-weight="700" fill="%234A90D9">C-C</text></svg>';
+    const iconUrl='data:image/svg+xml,'+iconSvg;
+    const link=document.createElement('link');
+    link.rel='apple-touch-icon';link.href=iconUrl;
+    document.head.appendChild(link);
+  }catch(e){}
 
-  // Apple touch icon
-  const link=document.createElement('link');
-  link.rel='apple-touch-icon';link.href=iconUrl;
-  document.head.appendChild(link);
+  // Manifest via blob — safe try/catch
+  try{
+    const manifest={name:'Chord Clock',short_name:'C-C',start_url:'.',display:'standalone',background_color:'#1c1c1e',theme_color:'#1c1c1e'};
+    const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    const mUrl=URL.createObjectURL(mBlob);
+    // Use DOMContentLoaded to ensure element exists
+    const setManifest=()=>{const el=document.getElementById('manifest-link');if(el)el.href=mUrl;};
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',setManifest);}
+    else{setManifest();}
+  }catch(e){}
 
-  // Manifest
-  const manifest={
-    name:'Chord Clock',short_name:'C-C',
-    start_url:'.',display:'standalone',
-    background_color:'#1c1c1e',theme_color:'#1c1c1e',
-    icons:[{src:iconUrl,sizes:'180x180',type:'image/svg+xml'}]
-  };
-  const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
-  document.getElementById('manifest-link').href=URL.createObjectURL(mBlob);
-
-  // Service Worker (inline via blob)
-  // Service Worker: use try/catch to prevent Android JS crash on blob URL failure
-  if('serviceWorker' in navigator){
-    try{
-      const swCode=`const CACHE='cc-v2';self.addEventListener('install',e=>{self.skipWaiting();});self.addEventListener('activate',e=>{self.clients.claim();});self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('',{status:408})));});`;
-      const swBlob=new Blob([swCode],{type:'application/javascript'});
-      const swUrl=URL.createObjectURL(swBlob);
-      navigator.serviceWorker.register(swUrl).catch(()=>{});
-    }catch(e){}
-  }
+  // Service Worker — skip entirely on Android to avoid blocking
+  // SW via blob URL is blocked by Android Chrome's Content-Security-Policy
+  // Only register if we have a real URL (not blob/file)
+  try{
+    if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
+      const swCode=`const C='cc-v3';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const b=new Blob([swCode],{type:'application/javascript'});
+      navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
+    }
+  }catch(e){}
 })();
 
 // ===================== KEY SIGNATURES =====================
@@ -288,77 +291,98 @@ CHORDS.forEach(ch=>{
 });
 
 // ===================== AUDIO =====================
+// Architecture: each osc → voiceGain(fixed, attack only)
+//               all voiceGains → mixGain(handles decay/release)
+//               mixGain → limiter(fixed gain) → destination
+// This means only ONE node controls time-varying gain,
+// eliminating the beating/wavering caused by multiple simultaneous GainNode ramps.
+
 let actx=null;
-let masterGain=null;
-let compressor=null;
-const activeNodes=new Map();
+let mixGain=null;   // shared gain node — only this does time-varying ramps
+let limiter=null;   // fixed output gain, no time variation
+const activeNodes=new Map(); // n -> {osc, vGain}
 
 function getAC(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
-    compressor=actx.createDynamicsCompressor();
-    compressor.threshold.value=-16;
-    compressor.knee.value=8;
-    compressor.ratio.value=3;
-    compressor.attack.value=0.001;
-    compressor.release.value=0.15;
-    masterGain=actx.createGain();
-    masterGain.gain.value=0.75;
-    compressor.connect(masterGain);
-    masterGain.connect(actx.destination);
+    mixGain=actx.createGain();
+    mixGain.gain.value=1.0;
+    limiter=actx.createGain();
+    limiter.gain.value=0.70; // fixed output level — never changes
+    mixGain.connect(limiter);
+    limiter.connect(actx.destination);
   }
   if(actx.state==='suspended')actx.resume().catch(()=>{});
   return actx;
 }
 
-const VOICE_GAIN=0.20;
+// Per-voice level: fixed constant, no time variation
+// Scale by voice count so chords don't clip
+function voiceLevel(nVoices){ return Math.min(0.28, 0.28/Math.sqrt(Math.max(1,nVoices))); }
 
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
-  const{osc,gain}=activeNodes.get(n);
+  const{osc,vGain}=activeNodes.get(n);
   activeNodes.delete(n);
   const t=actx.currentTime;
-  gain.gain.cancelScheduledValues(t);
-  // Read current value at exact now — prevents discontinuity pop
-  gain.gain.setValueAtTime(gain.gain.value,t);
-  const fadeMs=imm?0.15:0.8;  // 150ms release on play-mode note-off
-  gain.gain.linearRampToValueAtTime(0.0001,t+fadeMs);
-  try{osc.stop(t+fadeMs+0.02);}catch(e){}
+  // Fade the individual voice gain to silence (prevents click on note removal)
+  vGain.gain.cancelScheduledValues(t);
+  vGain.gain.setValueAtTime(vGain.gain.value,t);
+  const fade=imm?0.015:0.08; // very short: click prevention only
+  vGain.gain.linearRampToValueAtTime(0.0001,t+fade);
+  try{osc.stop(t+fade+0.01);}catch(e){}
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 
-function _playOsc(n,semitone,holdMode){
+// Schedule mixGain decay — called once per playSelected/playModePress
+// All voices are affected equally → no relative amplitude variation → no beating
+function scheduleMixDecay(holdMode){
+  const t=actx.currentTime+0.05;
+  mixGain.gain.cancelScheduledValues(t);
+  mixGain.gain.setValueAtTime(1.0,t);
+  if(holdMode){
+    // Play mode: natural piano-like decay while held
+    mixGain.gain.linearRampToValueAtTime(0.72,t+0.4);
+    mixGain.gain.linearRampToValueAtTime(0.52,t+1.5);
+    // Release handled by scheduleMixRelease() on pointer/key up
+  } else {
+    // Analyze mode: single smooth decay to silence
+    mixGain.gain.linearRampToValueAtTime(1.0,t+0.01); // hold briefly
+    mixGain.gain.linearRampToValueAtTime(0.0001,t+3.5);
+  }
+}
+
+function scheduleMixRelease(){
+  // Called when all play-mode notes are released
+  const t=actx.currentTime;
+  const cur=mixGain.gain.value;
+  mixGain.gain.cancelScheduledValues(t);
+  mixGain.gain.setValueAtTime(Math.max(cur,0.0001),t);
+  mixGain.gain.linearRampToValueAtTime(0.0001,t+0.15); // 150ms release
+}
+
+function _playOsc(n,semitone,nVoices){
   const ac=getAC();
   const freq=442*Math.pow(2,(semitone-9)/12);
-  const gv=VOICE_GAIN;
+  const level=voiceLevel(nVoices);
   const t=ac.currentTime+0.05;
 
   const osc=ac.createOscillator();
-  const gain=ac.createGain();
+  const vGain=ac.createGain();
   osc.type='sine';
   osc.frequency.value=freq;
 
-  if(holdMode){
-    // Play mode:
-    // Ultra-fast attack (5ms) so note is at full volume almost instantly.
-    // Then gentle decay while held. stopNote() cuts with 150ms fade on release.
-    gain.gain.setValueAtTime(0.0001,t);
-    gain.gain.linearRampToValueAtTime(gv,t+0.005);    // 5ms attack → peak
-    gain.gain.setValueAtTime(gv,t+0.005);
-    gain.gain.linearRampToValueAtTime(gv*0.70,t+0.4); // natural decay
-    gain.gain.linearRampToValueAtTime(gv*0.50,t+1.5); // sustain level
-    osc.connect(gain);gain.connect(compressor);
-    osc.start(t);osc.stop(t+30);
-  } else {
-    // Analyze mode: fast attack, long auto-release
-    gain.gain.setValueAtTime(0.0001,t);
-    gain.gain.linearRampToValueAtTime(gv,t+0.010);    // 10ms attack
-    gain.gain.setValueAtTime(gv,t+0.010);
-    gain.gain.linearRampToValueAtTime(0.0001,t+3.5);  // slow decay
-    osc.connect(gain);gain.connect(compressor);
-    osc.start(t);osc.stop(t+3.6);
-  }
-  activeNodes.set(n,{osc,gain});
+  // voiceGain: attack only, then FIXED value — no ongoing ramp
+  vGain.gain.setValueAtTime(0.0001,t);
+  vGain.gain.linearRampToValueAtTime(level,t+0.010); // 10ms attack
+  vGain.gain.setValueAtTime(level,t+0.010);          // hold fixed forever
+
+  osc.connect(vGain);
+  vGain.connect(mixGain); // all voices feed into single mixGain
+  osc.start(t);
+  osc.stop(t+30); // safety; stopped by stopNote() in practice
+
+  activeNodes.set(n,{osc,vGain});
 }
 
 function playSelected(){
@@ -367,7 +391,8 @@ function playSelected(){
   const hits=detect(sel);
   const root=hits.length>0?hits[0].root:sel[0];
   stopAll(true);
-  sel.forEach(n=>_playOsc(n,n+(n<root?12:0),false));
+  scheduleMixDecay(false); // Analyze mode decay
+  sel.forEach(n=>_playOsc(n,n+(n<root?12:0),sel.length));
 }
 
 // ===================== DETECTION =====================
@@ -661,7 +686,10 @@ function setMode(mode){
   document.body.classList.toggle('play-mode',mode==='play');
   if(mode==='play'){
     // Clear analyze selections when entering play mode
-    stopAll(true);selected.clear();sugHL.clear();updateAll();
+    stopAll(true);selected.clear();sugHL.clear();
+    // Reset mixGain to full
+    if(mixGain){mixGain.gain.cancelScheduledValues(0);mixGain.gain.value=1.0;}
+    updateAll();
   } else {
     // Release all play-mode held notes when returning to analyze
     playActive.forEach((_,n)=>stopNote(n,true));
@@ -673,8 +701,8 @@ function playModePress(n){
   if(playActive.has(n))return;
   playActive.set(n,true);
   selected.add(n);
-  // Play mode: no inversion — play each note in same octave (C4 range)
-  _playOsc(n,n,true); // holdMode=true, no octave shift
+  scheduleMixDecay(true); // reset mix envelope for play mode
+  _playOsc(n,n,selected.size); // no octave shift in play mode
   updateAll();
 }
 
@@ -682,7 +710,11 @@ function playModeRelease(n){
   if(!playActive.has(n))return;
   playActive.delete(n);
   selected.delete(n);
-  stopNote(n,true); // immediate short fade on release
+  stopNote(n,true); // fade out individual voice
+  if(playActive.size===0){
+    // Last note released: fade mixGain to silence
+    scheduleMixRelease();
+  }
   updateAll();
 }
 
@@ -768,8 +800,14 @@ initMIDI();
 
 // Wrap in DOMContentLoaded for Android Chrome compatibility
 function init(){
-  try{renderSlices();}catch(e){console.error('renderSlices:',e);}
-  try{renderCenter();}catch(e){console.error('renderCenter:',e);}
+  // requestAnimationFrame ensures the DOM is fully painted before we
+  // try to append SVG children — fixes Android Chrome blank pizza issue
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      try{renderSlices();}catch(e){console.error('renderSlices:',e);}
+      try{renderCenter();}catch(e){console.error('renderCenter:',e);}
+    });
+  });
 }
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',init);
