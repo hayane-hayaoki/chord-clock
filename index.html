@@ -733,6 +733,25 @@ function resetAll(){
 const KEY_MAP={'Digit1':0,'Digit2':2,'Digit3':4,'Digit4':5,'Digit5':7,'Digit6':9,'Digit7':11,'Digit8':0,'F1':1,'F2':3,'F4':6,'F5':8,'F6':10};
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();resetAll();return;}
+
+  // Arrow Left/Right: switch Analyze/Play mode
+  if(e.key==='ArrowLeft'){e.preventDefault();setMode('analyze');return;}
+  if(e.key==='ArrowRight'){e.preventDefault();setMode('play');return;}
+
+  // Arrow Up/Down: move key signature up/down
+  if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+    e.preventDefault();
+    const cur=+ksel.value;
+    const next=e.key==='ArrowUp'
+      ? Math.max(0,cur-1)
+      : Math.min(KEY_SIGS.length-1,cur+1);
+    if(next!==cur){
+      ksel.value=next;
+      ksel.dispatchEvent(new Event('change'));
+    }
+    return;
+  }
+
   if(e.code==='Space'||e.key==='F3'||e.key==='F7'){
     e.preventDefault();
     if(currentMode==='analyze'&&selected.size>0)playSelected();
