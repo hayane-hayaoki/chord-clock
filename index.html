@@ -261,6 +261,37 @@ body.next-mode #prog-log-wrap{display:block;}
   transition:color .12s,border-color .12s;
 }
 .pl-clear:hover{color:#888;border-color:#555;}
+
+/* VOLUME SLIDER */
+#vol-control{
+  display:flex;align-items:center;gap:7px;
+}
+#vol-control label{
+  font-size:11px;color:#666;white-space:nowrap;font-weight:600;letter-spacing:.4px;
+  cursor:pointer;user-select:none;
+}
+#vol-slider{
+  -webkit-appearance:none;appearance:none;
+  width:90px;height:4px;border-radius:2px;
+  background:linear-gradient(to right,#4A90D9 var(--vol-pct,70%),#3a3a3e var(--vol-pct,70%));
+  outline:none;cursor:pointer;border:none;
+}
+#vol-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:16px;height:16px;border-radius:50%;
+  background:#4A90D9;cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+  transition:background .15s,transform .1s;
+}
+#vol-slider::-webkit-slider-thumb:active{
+  background:#6aaee8;transform:scale(1.15);
+}
+#vol-slider::-moz-range-thumb{
+  width:16px;height:16px;border-radius:50%;border:none;
+  background:#4A90D9;cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+#vol-icon{font-size:13px;cursor:pointer;user-select:none;line-height:1;}
 </style>
 </head>
 <body>
@@ -278,6 +309,11 @@ body.next-mode #prog-log-wrap{display:block;}
       <label>Key: </label>
       <select id="key-select"></select>
       <span id="key-badge">—</span>
+    </div>
+    <div id="vol-control">
+      <span id="vol-icon" title="ミュート切り替え" onclick="toggleMute()">🔊</span>
+      <input id="vol-slider" type="range" min="0" max="100" value="70"
+             oninput="setVolume(this.value)" title="音量">
     </div>
   </div>
   <div id="main-row">
@@ -503,6 +539,7 @@ function getAC(){
     limiter.gain.value=0.70;
     mixGain.connect(limiter);
     limiter.connect(actx.destination);
+    limiter.gain.value=_volValue; // 音量スライダーの初期値を反映
     _updateLatency(); // デバイスのバッファサイズに合わせてレイテンシー最適化
   }
   if(actx.state==='suspended')actx.resume().catch(()=>{});
@@ -576,6 +613,50 @@ function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 function scheduleMixDecay(){}
 function scheduleMixRelease(){}
 function resetMixGain(){}
+
+// ===================== VOLUME CONTROL =====================
+let _volValue=0.70; // 0.0〜1.0 (初期値70%)
+let _isMuted=false;
+let _volBeforeMute=0.70;
+
+function _applyVolume(){
+  if(!limiter)return;
+  const v=_isMuted?0:_volValue;
+  limiter.gain.setTargetAtTime(v,actx?actx.currentTime:0,0.02);
+}
+function setVolume(pct){
+  _volValue=Number(pct)/100;
+  if(_isMuted&&_volValue>0){_isMuted=false;}
+  _applyVolume();
+  _updateVolUI();
+}
+function toggleMute(){
+  if(_isMuted){
+    _isMuted=false;
+    _volValue=_volBeforeMute||0.70;
+    document.getElementById('vol-slider').value=Math.round(_volValue*100);
+  } else {
+    _volBeforeMute=_volValue;
+    _isMuted=true;
+  }
+  _applyVolume();
+  _updateVolUI();
+}
+function _updateVolUI(){
+  const slider=document.getElementById('vol-slider');
+  const icon=document.getElementById('vol-icon');
+  const pct=_isMuted?0:Math.round(_volValue*100);
+  slider.value=_isMuted?0:Math.round(_volValue*100);
+  slider.style.setProperty('--vol-pct',pct+'%');
+  if(_isMuted||pct===0)icon.textContent='🔇';
+  else if(pct<40)icon.textContent='🔈';
+  else if(pct<70)icon.textContent='🔉';
+  else icon.textContent='🔊';
+}
+// 初期UIを反映（DOMContentLoaded後に実行）
+document.addEventListener('DOMContentLoaded',function(){
+  _updateVolUI();
+});
 
 function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
