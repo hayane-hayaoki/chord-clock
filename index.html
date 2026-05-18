@@ -457,59 +457,112 @@ function getAC(){
     limiter.gain.value=0.70;
     mixGain.connect(limiter);
     limiter.connect(actx.destination);
+    _updateLatency(); // デバイスのバッファサイズに合わせてレイテンシー最適化
   }
   if(actx.state==='suspended')actx.resume().catch(()=>{});
   return actx;
 }
 function voiceLevel(nVoices){return Math.min(0.28,0.28/Math.sqrt(Math.max(1,nVoices)));}
+
+// ---- クリックノイズ対策の設計方針 ----
+// mixGain は固定値(1.0)のまま一切触らない。
+// サスティン／ホールド／リリースはすべて各ボイスの vGain だけで制御する。
+// これにより mixGain のスケジュール競合が完全になくなる。
+//
+// 各ボイスの envelope:
+//   attack  : 0→level を 12ms (exponential)
+//   sustain : holdMode=false → level を 3.5s かけて 0 へ linearRamp
+//             holdMode=true  → 0.4s で 0.85 倍、1.5s で 0.65 倍まで自然減衰
+//   release : playModeRelease 時に 150ms で 0 へ exponential
+
+// holdMode フラグ: _playOsc に渡す
+let _holdMode=false;
+
+// ---- レイテンシー管理 ----
+// AHEAD: JS→AudioWorklet スレッドずれ + スケジュール処理余裕
+// getAC() 後に baseLatency から動的に決定する（デバイス最適化）
+// FADE_IMM: 即時停止フェード時間。AHEAD より長くする必要がある
+// START_OFFSET: 新しい音の開始タイミング = AHEAD + FADE_IMM + 少し余裕
+// 合計レイテンシー = START_OFFSET ≒ 20〜30ms（デバイスによる）
+
+let AHEAD=0.010;      // 初期値: getAC() 後に更新
+let FADE_IMM=0.018;   // 即時フェード: AHEAD+数ms
+let START_OFFSET=0.028; // 発音開始: FADE_IMM+余裕
+
+function _updateLatency(){
+  if(!actx)return;
+  // baseLatency = ハードウェアバッファサイズ（例: 256samples/44100 ≒ 5.8ms）
+  const bl=actx.baseLatency||0.005;
+  AHEAD=bl+0.004;           // バッファ1枚分 + 4ms 余裕
+  FADE_IMM=AHEAD+0.010;     // フェード = AHEAD + 10ms
+  START_OFFSET=FADE_IMM+0.008; // 発音 = フェード完了 + 8ms 余裕
+}
+
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
   const{osc,vGain}=activeNodes.get(n);
   activeNodes.delete(n);
-  const t=actx.currentTime;
-  vGain.gain.cancelScheduledValues(t);
-  vGain.gain.setValueAtTime(vGain.gain.value,t);
-  const fade=imm?0.015:0.08;
-  vGain.gain.linearRampToValueAtTime(0.0001,t+fade);
-  try{osc.stop(t+fade+0.01);}catch(e){}
+  const t=actx.currentTime+AHEAD;
+  const g=vGain.gain;
+  if(g.cancelAndHoldAtTime){ g.cancelAndHoldAtTime(t); }
+  else {
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(Math.max(g.value,0.0001),t);
+  }
+  const fade=imm?FADE_IMM:0.12;
+  g.exponentialRampToValueAtTime(0.0001,t+fade);
+  try{osc.stop(t+fade+0.005);}catch(e){}
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
-function scheduleMixDecay(holdMode){
-  const t=actx.currentTime+0.05;
-  mixGain.gain.cancelScheduledValues(t);
-  mixGain.gain.setValueAtTime(1.0,t);
-  if(holdMode){
-    mixGain.gain.linearRampToValueAtTime(0.72,t+0.4);
-    mixGain.gain.linearRampToValueAtTime(0.52,t+1.5);
-  }else{
-    mixGain.gain.linearRampToValueAtTime(1.0,t+0.01);
-    mixGain.gain.linearRampToValueAtTime(0.0001,t+3.5);
-  }
-}
-function scheduleMixRelease(){
-  const t=actx.currentTime;
-  const cur=mixGain.gain.value;
-  mixGain.gain.cancelScheduledValues(t);
-  mixGain.gain.setValueAtTime(Math.max(cur,0.0001),t);
-  mixGain.gain.linearRampToValueAtTime(0.0001,t+0.15);
-}
-function _playOsc(semitone,nVoices){
+
+// 廃止した mixGain 操作の呼び出し元が残っていても安全に無視する
+function scheduleMixDecay(){}
+function scheduleMixRelease(){}
+function resetMixGain(){}
+
+function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
-  const freq=442*Math.pow(2,(semitone-69)/12); // MIDI: 69=A4=442Hz
+  const freq=442*Math.pow(2,(semitone-69)/12);
   const level=voiceLevel(nVoices);
-  const t=ac.currentTime+0.05;
+  const t=ac.currentTime+START_OFFSET;
   const osc=ac.createOscillator();
   const vGain=ac.createGain();
   osc.type='sine';
   osc.frequency.value=freq;
-  vGain.gain.setValueAtTime(0.0001,t);
-  vGain.gain.linearRampToValueAtTime(level,t+0.010);
-  vGain.gain.setValueAtTime(level,t+0.010);
+  const g=vGain.gain;
+  // attack
+  g.setValueAtTime(0.0001,t);
+  g.exponentialRampToValueAtTime(level,t+0.012);
+  if(holdMode){
+    // Play モード: 押している間ゆっくり減衰、離したら releaseVoice() で止める
+    g.setValueAtTime(level,t+0.012);
+    g.linearRampToValueAtTime(level*0.85,t+0.4);
+    g.linearRampToValueAtTime(level*0.65,t+1.5);
+    // 長押し対策: 10秒で完全消音
+    g.linearRampToValueAtTime(0.0001,t+10);
+  } else {
+    // Analyze / Next モード: 3.5秒サスティン
+    g.setValueAtTime(level,t+0.012);
+    g.linearRampToValueAtTime(0.0001,t+3.5);
+  }
   osc.connect(vGain);
   vGain.connect(mixGain);
   osc.start(t);
-  osc.stop(t+30);
+  osc.stop(t+10.1); // envelope 終了より少し後
   activeNodes.set(semitone,{osc,vGain});
+}
+
+// Play モードのリリース: 押鍵中の vGain を 150ms でフェードアウト
+function releaseVoice(n){
+  if(!activeNodes.has(n))return;
+  const{osc,vGain}=activeNodes.get(n);
+  activeNodes.delete(n);
+  const t=actx.currentTime+AHEAD;
+  const g=vGain.gain;
+  if(g.cancelAndHoldAtTime){ g.cancelAndHoldAtTime(t); }
+  else { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(g.value,0.0001),t); }
+  g.exponentialRampToValueAtTime(0.0001,t+0.15);
+  try{osc.stop(t+0.160);}catch(e){}
 }
 // ---- Voice leading ----
 const VL_LO=48,VL_HI=76,VL_CENTRE=60; // C3-E5, centre C4
@@ -598,8 +651,8 @@ function renderProgLog(){
       if(currentMode==='next')updateNextChordPanel();
       var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
       var sems=voiceLeadSemitones(pcs,lastChordSemitones);
-      stopAll(true);scheduleMixDecay(false);
-      sems.forEach(function(s){_playOsc(s,sems.length);});
+      stopAll(true);
+      sems.forEach(function(s){_playOsc(s,sems.length,false);});
       lastChordSemitones=[].concat(sems);
       lastInversion=detectInversion(sems,it.root);
       ncPlayingKey=null;
@@ -661,8 +714,8 @@ function playPCs(pcs,rootPc,suf){
       semitones=voiceLeadSemitones(pcs,lastChordSemitones);
     }
   }
-  stopAll(true);scheduleMixDecay(false);
-  semitones.forEach(function(s){_playOsc(s,semitones.length);});
+  stopAll(true);
+  semitones.forEach(function(s){_playOsc(s,semitones.length,false);});
   lastChordSemitones=[].concat(semitones);
   var reg=document.getElementById('vl-register');
   if(reg)reg.textContent=(currentMode==='next')?registerLabel(semitones):'';
@@ -688,8 +741,8 @@ function playSelected(rootOverride){
     // Convert PC to MIDI: reference file used (semitone-9)/12 with semitone=n+(n<root?12:0)
     // which equals MIDI 60+n+(n<root?12:0) with MIDI formula (midi-69)/12
     // i.e. offset = 69-9 = 60, so midi = n+(n<root?12:0)+60
-    stopAll(true);scheduleMixDecay(false);
-    sel.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,sel.length);});
+    stopAll(true);
+    sel.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,sel.length,false);});
   }
 }
 function playChordDef(root,s){
@@ -700,8 +753,8 @@ function playChordDef(root,s){
     playPCs(notes,root,s);
   } else {
     // Analyze mode: simple octave-shift method (original good sound)
-    stopAll(true);scheduleMixDecay(false);
-    notes.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,notes.length);});
+    stopAll(true);
+    notes.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,notes.length,false);});
   }
 }
 
@@ -1399,7 +1452,7 @@ function setMode(mode){
   ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
   progLog=[];renderProgLog();
-  if(mixGain){mixGain.gain.cancelScheduledValues(0);mixGain.gain.value=1.0;}
+  resetMixGain();
   updateAll();
 }
 
@@ -1407,9 +1460,8 @@ function playModePress(n){
   if(playActive.has(n))return;
   playActive.set(n,true);
   selected.add(n);
-  scheduleMixDecay(true);
   var s=n+60;while(s<VL_LO)s+=12;while(s>VL_HI)s-=12;
-  _playOsc(s,selected.size);
+  _playOsc(s,selected.size,true);
   updateAll();
 }
 
@@ -1417,11 +1469,7 @@ function playModeRelease(n){
   if(!playActive.has(n))return;
   playActive.delete(n);
   selected.delete(n);
-  var sr=n+60;while(sr<VL_LO)sr+=12;while(sr>VL_HI)sr-=12;stopNote(sr,true);
-  if(playActive.size===0){
-    // Last note released: fade mixGain to silence
-    scheduleMixRelease();
-  }
+  var sr=n+60;while(sr<VL_LO)sr+=12;while(sr>VL_HI)sr-=12;releaseVoice(sr);
   updateAll();
 }
 
