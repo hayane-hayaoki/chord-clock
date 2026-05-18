@@ -464,6 +464,17 @@ function getAC(){
 }
 function voiceLevel(nVoices){return Math.min(0.28,0.28/Math.sqrt(Math.max(1,nVoices)));}
 
+// 等ラウドネス補正: 高音ほど耳に大きく聞こえるのを補正する
+// MIDI 60(C4)=基準, それより高いほどゲインを下げる
+// 参考: 人間の聴覚は約1kHz基準で4kHz帯は約10dB感度が高い
+// ここでは 12半音(1オクターブ)上がるごとに約-2.5dB(-0.75倍) の補正をかける
+function loudnessComp(midiNote){
+  const ref=62; // D4付近を基準(コード中間音として自然な位置)
+  const semisAboveRef=midiNote-ref;
+  // 1オクターブ(12半音)上で -3dB (×0.707), 下で +1.5dB (×1.19) 程度
+  return Math.pow(0.944, semisAboveRef); // 0.944^12 ≒ 0.50 (-6dB/oct, 少し強め)
+}
+
 // ---- クリックノイズ対策の設計方針 ----
 // mixGain は固定値(1.0)のまま一切触らない。
 // サスティン／ホールド／リリースはすべて各ボイスの vGain だけで制御する。
@@ -523,7 +534,7 @@ function resetMixGain(){}
 function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
   const freq=442*Math.pow(2,(semitone-69)/12);
-  const level=voiceLevel(nVoices);
+  const level=voiceLevel(nVoices)*loudnessComp(semitone);
   const t=ac.currentTime+START_OFFSET;
   const osc=ac.createOscillator();
   const vGain=ac.createGain();
@@ -737,12 +748,9 @@ function playSelected(rootOverride){
   if(currentMode==='next'){
     playPCs(sel,root,suf);
   } else {
-    // Analyze / Play mode: simple octave-shift method (original good sound)
-    // Convert PC to MIDI: reference file used (semitone-9)/12 with semitone=n+(n<root?12:0)
-    // which equals MIDI 60+n+(n<root?12:0) with MIDI formula (midi-69)/12
-    // i.e. offset = 69-9 = 60, so midi = n+(n<root?12:0)+60
     stopAll(true);
-    sel.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,sel.length,false);});
+    var midis=analyzeVoicing(sel,root);
+    midis.forEach(function(m){_playOsc(m,midis.length,false);});
   }
 }
 function playChordDef(root,s){
@@ -752,10 +760,46 @@ function playChordDef(root,s){
   if(currentMode==='next'){
     playPCs(notes,root,s);
   } else {
-    // Analyze mode: simple octave-shift method (original good sound)
     stopAll(true);
-    notes.forEach(function(n){var midi=(n+(n<root?12:0))+60;_playOsc(midi,notes.length,false);});
+    var midis=analyzeVoicing(notes,root);
+    midis.forEach(function(m){_playOsc(m,midis.length,false);});
   }
+}
+
+// Analyze / Play モード用ボイシング
+// prevRootMidi: 直前に鳴っていたrootのMIDIノート番号（連続タップ時のオクターブジャンプ防止）
+var _prevRootMidi=null;
+
+function analyzeVoicing(pcs,rootPc){
+  // 単音: 常にC4〜B4 (60〜71)
+  if(pcs.length===1){
+    _prevRootMidi=rootPc+60;
+    return [rootPc+60];
+  }
+  var base=rootPc+48;
+  if(_prevRootMidi!==null){
+    // 直前のroot音に最も近いオクターブを選ぶ → 音域が連続してジャンプしない
+    while(Math.abs(base+12-_prevRootMidi)<Math.abs(base-_prevRootMidi))base+=12;
+    while(Math.abs(base-12-_prevRootMidi)<Math.abs(base-_prevRootMidi))base-=12;
+    // 広がりすぎ防止: rootはC3〜B4(48〜71)以内
+    if(base<48)base+=12;
+    if(base>71)base-=12;
+  } else {
+    // 初回: E3〜Eb4(52〜63)の標準レンジ
+    while(base<52)base+=12;
+    while(base>63)base-=12;
+  }
+  _prevRootMidi=base;
+  var result=[base];
+  var others=pcs.filter(function(n){return n!==rootPc;})
+    .sort(function(a,b){return((a-rootPc+12)%12)-((b-rootPc+12)%12);});
+  others.forEach(function(n){
+    var prev=result[result.length-1];
+    var s=n+48;
+    while(s<=prev)s+=12;
+    result.push(s);
+  });
+  return result;
 }
 
 // Blink the extension ring of a specific note
@@ -1451,6 +1495,7 @@ function setMode(mode){
   playActive.clear();
   ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
+  _prevRootMidi=null;
   progLog=[];renderProgLog();
   resetMixGain();
   updateAll();
@@ -1478,9 +1523,8 @@ function toggleNote(i){
     selected.delete(i);
     selectedOrder=selectedOrder.filter(function(n){return n!==i;});
     // In Analyze mode, activeNodes key is MIDI number (i+60 or i+72); try both
-    if(activeNodes.has(i+60))stopNote(i+60,true);
-    else if(activeNodes.has(i+72))stopNote(i+72,true);
-    else stopNote(i,true);
+    // PCに対応するMIDIノードを検索して停止
+    activeNodes.forEach(function(_,midi){if(midi%12===i)stopNote(midi,true);});
   } else {
     selected.add(i);
     selectedOrder.push(i);
@@ -1492,6 +1536,7 @@ function resetAll(){
   stopAll(true);selected.clear();sugHL.clear();extHL.clear();
   playActive.clear();ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
+  _prevRootMidi=null;
   progLog=[];renderProgLog();
   updateAll();
 }
@@ -1535,7 +1580,7 @@ document.addEventListener('keydown',e=>{
   if(currentMode==='play'){
     if(!playActive.has(pc))playModePress(pc);
   } else {
-    if(selected.has(pc)){selected.delete(pc);if(activeNodes.has(pc+60))stopNote(pc+60,true);else if(activeNodes.has(pc+72))stopNote(pc+72,true);else stopNote(pc,true);}
+    if(selected.has(pc)){selected.delete(pc);activeNodes.forEach(function(_,midi){if(midi%12===pc)stopNote(midi,true);});}
     else{selected.add(pc);playSelected();}
     updateAll();
   }
@@ -1561,7 +1606,7 @@ function initMIDI(){
           if(!playActive.has(pc))playModePress(pc);
         } else {
           // Analyze mode: toggle
-          if(selected.has(pc)){selected.delete(pc);if(activeNodes.has(pc+60))stopNote(pc+60,true);else if(activeNodes.has(pc+72))stopNote(pc+72,true);else stopNote(pc,true);}
+          if(selected.has(pc)){selected.delete(pc);activeNodes.forEach(function(_,midi){if(midi%12===pc)stopNote(midi,true);});}
           else{selected.add(pc);playSelected();}
           updateAll();
         }
