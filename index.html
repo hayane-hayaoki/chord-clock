@@ -70,6 +70,10 @@ html,body{
   width:100%;padding:4px 10px;
   display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:6px;
 }
+#results-area-next{
+  width:100%;padding:4px 6px 2px;
+  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:6px;
+}
 .result-block{
   width:auto;min-width:150px;max-width:280px;
   padding:6px 14px;border-radius:7px;
@@ -116,22 +120,60 @@ body.play-mode .rb-chord{color:#7ec8f0}
 
 /* ===================== NEXT CHORD MODE STYLES ===================== */
 #main-row{display:contents;}
+
+/* next-left-col: 通常モードでは display:contents でピザをそのまま流す */
+#next-left-col{display:contents;}
+
 body.next-mode #main-row{
   display:flex;flex-direction:row;align-items:flex-start;
   width:100%;gap:0;
 }
-body.next-mode #svg-wrap{
-  flex:0 0 auto;width:min(52vw,50vh);max-width:none;padding:0 4px;
+/* Next mode: 左カラム = ピザ + 今のコード（中央揃え） */
+body.next-mode #next-left-col{
+  display:flex;flex-direction:column;align-items:center;
+  flex:0 0 auto;width:min(52vw,50vh);
 }
+body.next-mode #svg-wrap{
+  width:100%;max-width:none;padding:0 4px;
+}
+/* Next mode: results-area は左カラム内で中央揃え */
+body.next-mode #results-area{
+  justify-content:center;
+  padding:4px 4px 2px;
+}
+/* Next mode: prog-log-wrap（左列内）は非表示。下部の専用ログを使う */
+body.next-mode #prog-log-wrap{display:none!important;}
+/* 右カラム: ジャンル選択 + コード候補（左揃え） */
 body.next-mode #next-chord-panel{
   flex:1 1 0;min-width:180px;
-  max-height:calc(min(52vw,50vh));overflow-y:auto;
+  height:calc(min(52vw,50vh) + 60px);overflow-y:auto;
   padding:6px 8px 10px;
 }
+/* コード履歴: 左カラム(ピザ下)に配置、Next mode時のみ表示 */
+#prog-log-wrap-bottom{display:none;width:100%;padding:8px 4px 6px;}
+body.next-mode #prog-log-wrap-bottom{display:block;}
+#prog-log-inner-bottom{
+  display:flex;align-items:center;justify-content:center;
+  flex-wrap:wrap;row-gap:6px;column-gap:0;
+  padding:2px 0;
+}
+#prog-log-inner-bottom::-webkit-scrollbar{display:none;}
+/* 未使用の旧next専用要素は隠す */
+#results-area-next{display:none!important;}
+#prog-log-wrap-next{display:none!important;}
+/* next-mode: 通常のresults-areaは非表示、パネル内の専用エリアを使う */
+body.next-mode #results-area{display:none!important;}
+#results-area-in-panel{
+  display:none;
+  width:100%;margin-top:24px;padding-top:12px;
+  border-top:1px solid #2a2a2e;
+  flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:6px;
+}
+body.next-mode #results-area-in-panel{display:flex;}
 @media(max-width:600px){
   body.next-mode #main-row{flex-direction:column;align-items:center;}
-  body.next-mode #svg-wrap{width:98vw!important;max-width:98vw!important;}
-  body.next-mode #next-chord-panel{max-height:none;width:100%;}
+  body.next-mode #next-left-col{width:96vw!important;}
+  body.next-mode #next-chord-panel{height:auto;max-height:none;width:100%;}
 }
 #next-chord-panel{width:100%;padding:6px 10px 10px;display:none;}
 body.next-mode #next-chord-panel{display:block;}
@@ -145,10 +187,10 @@ body.next-mode #extend-area{display:none!important;}
   display:none; /* next-mode only */
 }
 body.next-mode .rb-inversion{display:inline-block;}
-#vl-register{font-size:9px;color:#555;text-align:center;padding:2px 0 0;letter-spacing:.2px;min-height:14px;}
+#vl-register{font-size:9px;color:#555;text-align:left;padding:2px 0 0;letter-spacing:.2px;min-height:14px;}
 #next-chord-header{
   font-size:10px;font-weight:700;color:#888;letter-spacing:.8px;text-transform:uppercase;
-  text-align:center;margin-bottom:4px;padding-bottom:4px;
+  text-align:left;margin-bottom:4px;padding-bottom:4px;
   border-bottom:1px solid #2a2a2e;
 }
 .nc-section{margin-bottom:10px;}
@@ -159,9 +201,9 @@ body.next-mode .rb-inversion{display:inline-block;}
 .nc-section-label.g1{color:#7ec8f0;background:rgba(126,200,240,.08);border:1px solid rgba(126,200,240,.2);}
 .nc-section-label.g2{color:#a0d8a0;background:rgba(160,216,160,.08);border:1px solid rgba(160,216,160,.2);}
 .nc-section-label.g3{color:#e0a060;background:rgba(224,160,96,.08);border:1px solid rgba(224,160,96,.2);}
-.nc-section-head{display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap;}
+.nc-section-head{display:flex;align-items:center;justify-content:flex-start;gap:7px;margin-bottom:6px;flex-wrap:wrap;}
 .nc-section-desc{font-size:9px;color:#555;white-space:nowrap;}
-.nc-tags{display:flex;flex-wrap:wrap;gap:5px;}
+.nc-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;}
 .nc-tag{
   font-size:12px;font-weight:600;border-radius:6px;padding:4px 10px;
   cursor:pointer;border:1px solid transparent;transition:all .15s;user-select:none;
@@ -181,7 +223,7 @@ body.next-mode .rb-inversion{display:inline-block;}
 .mode-btn.next-active{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-radius:18px;}
 /* MOOD SELECTOR */
 #mood-selector{
-  display:flex;flex-wrap:wrap;gap:4px;justify-content:center;
+  display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-start;
   padding:5px 4px 7px;border-bottom:1px solid #2a2a2e;margin-bottom:7px;
 }
 .mood-btn{
@@ -239,7 +281,11 @@ body.next-mode #prog-log-wrap{display:block;}
     </div>
   </div>
   <div id="main-row">
-    <div id="svg-wrap"><svg id="pizza" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg" width="680" height="680" style="width:100%;height:auto"></svg></div>
+    <div id="next-left-col">
+      <div id="svg-wrap"><svg id="pizza" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg" width="680" height="680" style="width:100%;height:auto"></svg></div>
+      <div id="prog-log-wrap-bottom"><div id="prog-log-inner-bottom"></div></div>
+      <div id="prog-log-wrap"><div id="prog-log-inner"></div></div>
+    </div>
     <div id="next-chord-panel">
       <div id="next-chord-header">❆ Next Chord — 次のコードはどこへ？</div>
       <div id="mood-selector">
@@ -253,6 +299,7 @@ body.next-mode #prog-log-wrap{display:block;}
       <div id="next-chord-content">
         <div id="next-chord-empty">キーを選択してコードをタップしてください</div>
       </div>
+      <div id="results-area-in-panel"></div>
     </div>
   </div>
   <div id="results-area"></div>
@@ -261,7 +308,6 @@ body.next-mode #prog-log-wrap{display:block;}
     <div id="ext-label" style="font-size:10px;color:#666;margin-bottom:4px"></div>
     <div id="ext-list" style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center"></div>
   </div>
-  <div id="prog-log-wrap"><div id="prog-log-inner"></div></div>
 </div>
 <script>
 // ===================== PWA INLINE =====================
@@ -628,7 +674,7 @@ function registerLabel(semitones){
 }
 let lastInversion='';
 // ---- PROGRESSION LOG ----
-const PROG_LOG_MAX=24;
+const PROG_LOG_MAX=16;
 let progLog=[];
 function progLogPush(name,root,suf){
   progLog.forEach(function(p){p._active=false;});
@@ -637,47 +683,71 @@ function progLogPush(name,root,suf){
   renderProgLog();
 }
 function renderProgLog(){
-  const wrap=document.getElementById('prog-log-wrap');
-  const inner=document.getElementById('prog-log-inner');
-  if(!wrap||!inner)return;
-  if(progLog.length===0){wrap.style.display='none';inner.innerHTML='';return;}
-  // next-mode以外では表示しない
-  if(!document.body.classList.contains('next-mode')){wrap.style.display='none';return;}
-  wrap.style.cssText='display:block;width:100%;padding:4px 10px 6px;';
-  inner.innerHTML='';
-  progLog.forEach(function(item,i){
-    if(i>0){var arr=document.createElement('span');arr.className='pl-arrow';arr.textContent='>';inner.appendChild(arr);}
-    var span=document.createElement('span');
-    var isLast=(i===progLog.length-1&&!progLog.some(function(p){return p._active;}));
-    var isActive=!!item._active;
-    span.className='pl-chord'+(isActive?' pl-active':isLast?' pl-current':'');
-    span.textContent=item.name;
-    span.title='\u30af\u30ea\u30c3\u30af\u3067\u518d\u751f';
-    (function(it){span.addEventListener('click',function(){
-      var ch=CHORDS.find(function(c){return c.s===it.suf;});
-      selected.clear();sugHL.clear();extHL.clear();
-      if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
-      else{selected.add(it.root);}
-      renderSlices();renderCenter();updateResults();
-      if(currentMode==='next')updateNextChordPanel();
-      var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
-      var sems=voiceLeadSemitones(pcs,lastChordSemitones);
-      stopAll(true);
-      sems.forEach(function(s){_playOsc(s,sems.length,false);});
-      lastChordSemitones=[].concat(sems);
-      lastInversion=detectInversion(sems,it.root);
-      ncPlayingKey=null;
-      progLog.forEach(function(p){p._active=false;});
-      it._active=true;
-      renderProgLog();
-    });})(item);
-    inner.appendChild(span);
-  });
-  var clr=document.createElement('span');
-  clr.className='pl-clear';clr.textContent='\u2715';clr.title='\u30ed\u30b0\u3092\u30af\u30ea\u30a2';
-  clr.addEventListener('click',function(){progLog=[];renderProgLog();});
-  inner.appendChild(clr);
-  inner.scrollLeft=inner.scrollWidth;
+  var isNext=document.body.classList.contains('next-mode');
+  // 通常のprog-log-wrap（left col内、next-modeではCSSで非表示）
+  var wrap=document.getElementById('prog-log-wrap');
+  var inner=document.getElementById('prog-log-inner');
+  // next-mode専用の下部ログ
+  var wrapB=document.getElementById('prog-log-wrap-bottom');
+  var innerB=document.getElementById('prog-log-inner-bottom');
+
+  // 両方クリア
+  if(inner)inner.innerHTML='';
+  if(innerB)innerB.innerHTML='';
+  if(wrap)wrap.style.display='none';
+  if(wrapB)wrapB.style.display='none';
+
+  if(progLog.length===0)return;
+  if(!isNext)return; // next-mode以外では非表示
+
+  // next-mode: 下部に表示
+  if(!wrapB||!innerB)return;
+  wrapB.style.display='block';
+  const ROW_SIZE=8; // 1行あたりのコード数
+  function buildItems(target){
+    progLog.forEach(function(item,i){
+      // 8個目の直後（i===ROW_SIZE）に改行ブレークを挿入
+      if(i===ROW_SIZE){
+        var br=document.createElement('div');
+        br.style.cssText='width:100%;height:0;flex-basis:100%;';
+        target.appendChild(br);
+      }
+      // 矢印: 行頭（i===0 or i===ROW_SIZE）以外に付ける
+      if(i>0&&i!==ROW_SIZE){
+        var arr=document.createElement('span');arr.className='pl-arrow';arr.textContent='>';target.appendChild(arr);
+      }
+      var span=document.createElement('span');
+      var isLast=(i===progLog.length-1&&!progLog.some(function(p){return p._active;}));
+      var isActive=!!item._active;
+      span.className='pl-chord'+(isActive?' pl-active':isLast?' pl-current':'');
+      span.textContent=item.name;
+      span.title='\u30af\u30ea\u30c3\u30af\u3067\u518d\u751f';
+      (function(it){span.addEventListener('click',function(){
+        var ch=CHORDS.find(function(c){return c.s===it.suf;});
+        selected.clear();sugHL.clear();extHL.clear();
+        if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
+        else{selected.add(it.root);}
+        renderSlices();renderCenter();updateResults();
+        if(currentMode==='next')updateNextChordPanel();
+        var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
+        var sems=voiceLeadSemitones(pcs,lastChordSemitones);
+        stopAll(true);
+        sems.forEach(function(s){_playOsc(s,sems.length,false);});
+        lastChordSemitones=[].concat(sems);
+        lastInversion=detectInversion(sems,it.root);
+        ncPlayingKey=null;
+        progLog.forEach(function(p){p._active=false;});
+        it._active=true;
+        renderProgLog();
+      });})(item);
+      target.appendChild(span);
+    });
+    var clr=document.createElement('span');
+    clr.className='pl-clear';clr.textContent='\u2715';clr.title='\u30ed\u30b0\u3092\u30af\u30ea\u30a2';
+    clr.addEventListener('click',function(){progLog=[];renderProgLog();});
+    target.appendChild(clr);
+  }
+  buildItems(innerB);
 }
 // ---- Public play functions ----
 // rootPosition: rootPcを最低音に固定した配置を返す（Analyze/Playモード用）
@@ -968,33 +1038,34 @@ var MOOD_RULES={
         g3:[[6,'dim7','\u5bfe\u79f0dim7'],[3,'dim7','\u266dIIIdim7'],[1,'M7','\u266dIImaj7']]},
   },
   rock:{
-    0:{g1:[[5,'','I\u2192IV'],[7,'','I\u2192V'],[10,'','I\u2192\u266dVII \u30ed\u30c3\u30af'],[3,'','I\u2192\u266dIII']],
-       g2:[[8,'','I\u2192\u266dVI'],[7,'sus4','Vsus4'],[9,'m','VIm'],[2,'m','IIm']],
-       g3:[[6,'','\u266dV \u30d8\u30d3\u30fc'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[4,'','III']]},
-    5:{g1:[[0,'','IV\u2192I'],[7,'','IV\u2192V'],[10,'','IV\u2192\u266dVII'],[3,'','IV\u2192\u266dIII']],
-       g2:[[5,'m','IVm \u30b0\u30e9\u30f3\u30b8'],[8,'','\u266dVI'],[9,'m','VIm'],[7,'sus4','Vsus4']],
-       g3:[[6,'','\u266dV'],[2,'','II\u30d1\u30ef\u30fc'],[1,'','\u266dII']]},
-    7:{g1:[[0,'','V\u2192I'],[10,'','V\u2192\u266dVII'],[3,'','V\u2192\u266dIII'],[5,'','V\u2192IV']],
-       g2:[[8,'','V\u2192\u266dVI'],[7,'sus4','Vsus4'],[9,'m','\u507d\u7d42\u6b62VIm'],[2,'m','IIm']],
-       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[4,'','III']]},
-    10:{g1:[[0,'','\u266dVII\u2192I'],[5,'','\u266dVII\u2192IV'],[3,'','\u266dVII\u2192\u266dIII'],[8,'','\u266dVII\u2192\u266dVI']],
-        g2:[[7,'','\u266dVII\u2192V'],[10,'7','\u266dVII7 \u30d6\u30eb\u30fc\u30b9'],[2,'m','\u266dVII\u2192IIm']],
-        g3:[[6,'','\u266dV'],[1,'','\u266dII'],[9,'m','VIm']]},
-    3:{g1:[[0,'','\u266dIII\u2192I'],[10,'','\u266dIII\u2192\u266dVII'],[5,'','\u266dIII\u2192IV'],[8,'','\u266dIII\u2192\u266dVI']],
-       g2:[[7,'','\u266dIII\u2192V'],[3,'M7','\u266dIIImaj7'],[9,'m','VIm']],
-       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[2,'m','IIm']]},
-    8:{g1:[[3,'','\u266dVI\u2192\u266dIII'],[10,'','\u266dVI\u2192\u266dVII'],[0,'','\u266dVI\u2192I'],[5,'','\u266dVI\u2192IV']],
-       g2:[[7,'','\u266dVI\u2192V'],[8,'M7','\u266dVImaj7'],[9,'m','VIm']],
-       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[4,'','III']]},
-    2:{g1:[[7,'','IIm\u2192V'],[0,'','IIm\u2192I'],[10,'','IIm\u2192\u266dVII'],[5,'','IIm\u2192IV']],
-       g2:[[3,'','\u266dIII'],[8,'','\u266dVI'],[7,'sus4','Vsus4'],[2,'7','II7']],
-       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[4,'','III']]},
-    9:{g1:[[5,'','VIm\u2192IV'],[7,'','VIm\u2192V'],[0,'','VIm\u2192I'],[10,'','VIm\u2192\u266dVII']],
-       g2:[[3,'','\u266dIII'],[8,'','\u266dVI'],[2,'m','IIm']],
-       g3:[[6,'','\u266dV'],[9,'7','VI7\u30d6\u30eb\u30fc\u30b9'],[1,'','\u266dII']]},
-    11:{g1:[[0,'','\u2192I'],[7,'','\u2192V'],[10,'','\u2192\u266dVII']],
-        g2:[[3,'','\u2192\u266dIII'],[8,'','\u2192\u266dVI'],[5,'','\u2192IV']],
-        g3:[[6,'dim7','\u5bfe\u79f0dim7'],[1,'','\u266dII'],[9,'m','VIm']]},
+    // ロック/メタル: 短調ベース。Im=トニック, ♭III/♭VI/♭VII=核心
+    0:{g1:[[10,'','Im\u2192\u266dVII \u738b\u9053'],[3,'','Im\u2192\u266dIII \u91cd\u53e3'],[5,'m','Im\u2192IVm \u56fa\u3044'],[8,'','Im\u2192\u266dVI \u6697\u9ed2']],
+       g2:[[7,'','V \u30c6\u30f3\u30b7\u30e7\u30f3'],[5,'','IV \u539a\u307f'],[7,'7','V7\u2192Im'],[0,'m7','Im7 \u30cb\u30e5\u30a2\u30f3\u30b9']],
+       g3:[[6,'','\u266dV \u30c8\u30e9\u30a4\u30c8\u30fc\u30f3'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[2,'m7\u266d5','IIm7\u266d5']]},
+    10:{g1:[[0,'m','\u266dVII\u2192Im'],[3,'','\u266dVII\u2192\u266dIII'],[5,'m','\u266dVII\u2192IVm'],[8,'','\u266dVII\u2192\u266dVI']],
+        g2:[[7,'','\u266dVII\u2192V'],[10,'7','\u266dVII7 \u30d6\u30eb\u30fc\u30b9'],[0,'m7','\u266dVII\u2192Im7']],
+        g3:[[6,'','\u266dV \u5d29\u58ca'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[5,'','\u266dVII\u2192IV']]},
+    3:{g1:[[0,'m','\u266dIII\u2192Im'],[10,'','\u266dIII\u2192\u266dVII'],[8,'','\u266dIII\u2192\u266dVI'],[5,'m','\u266dIII\u2192IVm']],
+       g2:[[7,'','\u266dIII\u2192V'],[0,'m7','Im7'],[8,'m','\u266dVIm \u6697\u8ee2']],
+       g3:[[6,'','\u266dV \u795e\u79d8'],[1,'','\u266dII'],[2,'m7\u266d5','IIm7\u266d5']]},
+    5:{g1:[[0,'m','IVm\u2192Im'],[3,'','\u266dIII \u91cd\u53e3'],[10,'','\u266dVII \u738b\u9053'],[8,'','IVm\u2192\u266dVI']],
+       g2:[[7,'','\u2192V'],[5,'m7','IVm7'],[7,'7','V7\u2192Im']],
+       g3:[[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[6,'','\u266dV'],[2,'m7\u266d5','IIm7\u266d5']]},
+    8:{g1:[[3,'','\u266dVI\u2192\u266dIII'],[10,'','\u266dVI\u2192\u266dVII'],[0,'m','\u266dVI\u2192Im'],[5,'m','\u266dVI\u2192IVm']],
+       g2:[[7,'','\u266dVI\u2192V'],[0,'m7','\u2192Im7'],[8,'m7','\u266dVIm7 \u30cb\u30e5\u30a2\u30f3\u30b9']],
+       g3:[[6,'','\u266dV \u5d29\u58ca'],[1,'','\u266dII'],[2,'m7\u266d5','IIm7\u266d5']]},
+    7:{g1:[[0,'m','V\u2192Im \u89e3\u6c7a'],[10,'','\u266dVII \u30ed\u30c3\u30af'],[3,'','\u266dIII'],[0,'m7','Im7']],
+       g2:[[7,'7','V7\u2192Im \u30e1\u30bf\u30eb'],[5,'m','IVm'],[8,'','\u266dVI \u30b8\u30e7\u30d6\u30ba']],
+       g3:[[6,'','\u266dV'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[2,'m7\u266d5','IIm7\u266d5']]},
+    2:{g1:[[7,'','IIm7\u266d5\u2192V \u30c6\u30f3\u30b7\u30e7\u30f3'],[0,'m','\u2192Im'],[10,'','\u2192\u266dVII'],[5,'m','\u2192IVm']],
+       g2:[[8,'','\u2192\u266dVI'],[3,'','\u2192\u266dIII'],[7,'7','V7\u2192Im']],
+       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[2,'dim7','\u5bfe\u79f0dim7']]},
+    11:{g1:[[0,'m','\u2192Im \u89e3\u6c7a'],[0,'m7','\u2192Im7'],[7,'7','\u2192V7\u2192Im']],
+        g2:[[10,'','\u2192\u266dVII'],[3,'','\u2192\u266dIII'],[8,'','\u2192\u266dVI']],
+        g3:[[6,'dim7','\u5bfe\u79f0dim7'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[5,'m','IVm']]},
+    9:{g1:[[5,'m','VIm\u2192IVm'],[10,'','\u2192\u266dVII'],[0,'m','\u2192Im'],[3,'','\u266dVII\u2192\u266dIII']],
+       g2:[[8,'','\u266dVI'],[7,'','\u2192V'],[0,'m7','\u2192Im7']],
+       g3:[[6,'','\u266dV'],[1,'','\u266dII'],[2,'m7\u266d5','IIm7\u266d5']]},
   },
   cinematic:{
     0:{g1:[[5,'M7','IM7\u2192IVM7 \u58ee\u5927'],[8,'','I\u2192\u266dVI \u6620\u753b\u7684'],[3,'','I\u2192\u266dIII 叙\u60c5'],[7,'sus4','Vsus4 \u60a0\u7136']],
@@ -1092,14 +1163,37 @@ function updateNextChordPanel(){
   }
   var wrap=document.createElement('div');
   var hdr=document.createElement('div');
-  hdr.style.cssText='text-align:center;font-size:11px;color:#666;margin-bottom:8px';
+  hdr.style.cssText='text-align:left;font-size:11px;color:#666;margin-bottom:8px';
   hdr.textContent='\u73fe\u5728: '+degLabel;
   wrap.appendChild(hdr);
-  var sections=[
-    {key:'g1',label:'Group 1 \u2014 \u5b9a\u756a\u30fb\u5b89\u5b9a',desc:'\u738b\u9053\u9032\u884c',cls:'g1'},
-    {key:'g2',label:'Group 2 \u2014 \u30aa\u30b7\u30e3\u30ec\u30fb\u3042\u308a',desc:'\u6d17\u7df4\u3055\u308c\u305f\u9078\u629e',cls:'g2'},
-    {key:'g3',label:'Group 3 \u2014 \u98db\u3073\u9053\u5177\u30fb\u52b9\u679c\u7684',desc:'\u3053\u3053\u305e\u3068\u3044\u3046\u5834\u9762\u3067',cls:'g3'},
-  ];
+  var MOOD_SECTION_LABELS={
+    universal:[
+      {key:'g1',label:'Group 1 \u2014 \u5b9a\u756a\u30fb\u5b89\u5b9a\u7cfb',desc:'\u307e\u305a\u3053\u308c\u3092\u8a66\u305b\u308b\u738b\u9053\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'Group 2 \u2014 \u304a\u3057\u3083\u308c\u7cfb',desc:'\u5c11\u3057\u6d17\u7df4\u3055\u308c\u305f\u9078\u629e\u80a2',cls:'g2'},
+      {key:'g3',label:'Group 3 \u2014 \u7279\u6b8a\u30fb\u5f71\u7d20\u7cfb',desc:'\u9032\u884c\u306b\u30b9\u30d1\u30a4\u30b9\u3092\u52a0\u3048\u308b\u4e00\u6589',cls:'g3'},
+    ],
+    pop:[
+      {key:'g1',label:'Hook 1 \u2014 \u9244\u677f\u30ad\u30e3\u30c3\u30c1\u30fc\u7cfb',desc:'\u8033\u306b\u6b8b\u308b\u5b9a\u756a\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'Hook 2 \u2014 \u304a\u3057\u3083\u308c\u30fb\u6d17\u7df4\u7cfb',desc:'J-Pop\u30fb\u30b7\u30c6\u30a3\u30dd\u30c3\u30d7\u306e\u5b9a\u7d04\u624b',cls:'g2'},
+      {key:'g3',label:'Hook 3 \u2014 \u30b5\u30d7\u30e9\u30a4\u30ba\u7cfb',desc:'\u610f\u8868\u3092\u3064\u304f\u9b45\u60d1\u306e\u4e00\u624b',cls:'g3'},
+    ],
+    minor:[
+      {key:'g1',label:'Dark 1 \u2014 \u6697\u9ed2\u30fb\u738b\u9053\u7cfb',desc:'\u30de\u30a4\u30ca\u30fc\u8abf\u306e\u5b9a\u756a\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'Dark 2 \u2014 \u30c9\u30e9\u30de\u30c1\u30c3\u30af\u7cfb',desc:'\u60c5\u8abb\u3092\u52d5\u304b\u3059\u7dca\u5f35\u611f\u306e\u3042\u308b\u9078\u629e',cls:'g2'},
+      {key:'g3',label:'Dark 3 \u2014 \u6df1\u5c64\u30fb\u5b9f\u9a13\u7cfb',desc:'\u30af\u30e9\u30b7\u30c3\u30af\u30fb\u30b8\u30e3\u30ba\u9032\u884c\u304b\u3089\u306e\u5f15\u7528',cls:'g3'},
+    ],
+    rock:[
+      {key:'g1',label:'RIFF 1 \u2014 \u738b\u9053\u30d1\u30ef\u30fc\u7cfb',desc:'\u30ed\u30c3\u30af\u30fb\u30e1\u30bf\u30eb\u5b9a\u756a\u306e\u591a\u5ea6\u6bba\u3057\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'RIFF 2 \u2014 \u30b0\u30eb\u30fc\u30f4\u30fb\u91cd\u53e3\u7cfb',desc:'\u30cf\u30fc\u30c9\u30ed\u30c3\u30af\u306e\u9aa8\u683c\u306b\u306a\u308b\u9032\u884c',cls:'g2'},
+      {key:'g3',label:'RIFF 3 \u2014 \u30a2\u30b0\u30ec\u30c3\u30b7\u30d6\u30fb\u5d29\u58ca\u7cfb',desc:'\u30c8\u30ea\u30c3\u30ad\u30fc\u306a\u548c\u9f13\u3067\u517c\u306d\u3092\u5d29\u3059',cls:'g3'},
+    ],
+    cinematic:[
+      {key:'g1',label:'Scene 1 \u2014 \u58ee\u5927\u30fb\u611f\u52d5\u7cfb',desc:'\u30b9\u30af\u30ea\u30fc\u30f3\u3092\u57cb\u3081\u5c3d\u304f\u3059\u5f37\u529b\u306a\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'Scene 2 \u2014 \u6d41\u308c\u30fb\u7269\u8a9e\u7cfb',desc:'\u30b7\u30fc\u30f3\u306b\u6df1\u307f\u3068\u4f59\u97fb\u3092\u6dfb\u3048\u308b\u9078\u629e',cls:'g2'},
+      {key:'g3',label:'Scene 3 \u2014 \u795e\u79d8\u30fb\u5e7b\u60f3\u7cfb',desc:'\u30cf\u30ea\u30a6\u30c3\u30c9\u7d1a\u306e\u5e7b\u60f3\u7684\u548c\u58f0',cls:'g3'},
+    ],
+  };
+  var sections=MOOD_SECTION_LABELS[currentMood]||MOOD_SECTION_LABELS.universal;
   sections.forEach(function(sec){
     var cands=result[sec.key];if(!cands||!cands.length)return;
     var div=document.createElement('div');div.className='nc-section';
@@ -1375,7 +1469,12 @@ function getExtensions(sel, currentHits){
 
 function updateResults(){
   const sel=Array.from(selected).sort((a,b)=>a-b);
-  const area=document.getElementById('results-area');
+  const isNext=currentMode==='next';
+  // next-modeではパネル内の専用エリアに、それ以外は通常のresults-area
+  const area=document.getElementById(isNext?'results-area-in-panel':'results-area');
+  // next-mode切替時に通常エリアをクリア
+  if(isNext){const a2=document.getElementById('results-area');if(a2)a2.innerHTML='';}
+  else{const a2=document.getElementById('results-area-in-panel');if(a2)a2.innerHTML='';}
   const slEl=document.getElementById('sug-label');
   const slistEl=document.getElementById('sug-list');
   const extArea=document.getElementById('extend-area');
