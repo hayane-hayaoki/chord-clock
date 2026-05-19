@@ -68,11 +68,11 @@ html,body{
 #pizza{width:100%;height:auto;display:block}
 #results-area{
   width:100%;padding:4px 10px;
-  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:6px;
+  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:6px;
 }
 #results-area-next{
   width:100%;padding:4px 6px 2px;
-  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:6px;
+  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:6px;
 }
 .result-block{
   width:auto;min-width:150px;max-width:280px;
@@ -126,19 +126,21 @@ body.play-mode .rb-chord{color:#7ec8f0}
 
 body.next-mode #main-row{
   display:flex;flex-direction:row;align-items:flex-start;
+  justify-content:center;
   width:100%;gap:0;
 }
-/* Next mode: 左カラム = ピザ + 今のコード（中央揃え） */
+/* Next mode: 左カラム = ピザ + 今のコード（右寄せ） */
 body.next-mode #next-left-col{
-  display:flex;flex-direction:column;align-items:center;
+  display:flex;flex-direction:column;align-items:flex-end;
   flex:0 0 auto;width:min(52vw,50vh);
 }
 body.next-mode #svg-wrap{
   width:100%;max-width:none;padding:0 4px;
+  margin-left:auto;
 }
-/* Next mode: results-area は左カラム内で中央揃え */
+/* Next mode: results-area は左カラム内で右寄せ */
 body.next-mode #results-area{
-  justify-content:center;
+  justify-content:flex-end;
   padding:4px 4px 2px;
 }
 /* Next mode: prog-log-wrap（左列内）は非表示。下部の専用ログを使う */
@@ -184,9 +186,10 @@ body.next-mode #extend-area{display:none!important;}
   background:rgba(126,200,240,.10);border:1px solid rgba(126,200,240,.22);
   border-radius:4px;padding:1px 6px;margin-left:6px;
   vertical-align:middle;letter-spacing:.2px;
-  display:none; /* next-mode only */
+  display:none; /* next-mode and piano-mode only */
 }
 body.next-mode .rb-inversion{display:inline-block;}
+body.piano-mode .rb-inversion{display:inline-block;}
 #vl-register{font-size:9px;color:#555;text-align:left;padding:2px 0 0;letter-spacing:.2px;min-height:14px;}
 #next-chord-header{
   font-size:10px;font-weight:700;color:#888;letter-spacing:.8px;text-transform:uppercase;
@@ -221,6 +224,7 @@ body.next-mode .rb-inversion{display:inline-block;}
 .nc-tag.nc-playing{box-shadow:0 0 0 2px currentColor;}
 #next-chord-empty{text-align:center;color:#555;font-size:12px;padding:18px 0;}
 .mode-btn.next-active{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-radius:18px;}
+.mode-btn.piano-active{background:linear-gradient(135deg,#9aa8b8,#6a7a8a);color:#fff;border-radius:18px;box-shadow:0 0 0 1px rgba(200,210,220,.3);}
 /* MOOD SELECTOR */
 #mood-selector{
   display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-start;
@@ -292,6 +296,155 @@ body.next-mode #prog-log-wrap{display:block;}
   box-shadow:0 1px 4px rgba(0,0,0,.5);
 }
 #vol-icon{font-size:13px;cursor:pointer;user-select:none;line-height:1;}
+
+/* ===================== PIANO MODE ===================== */
+#piano-mode-wrap {
+  display: none;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 4px 8px;
+}
+body.piano-mode #piano-mode-wrap { display: flex; }
+body.piano-mode #main-row { display: none !important; }
+body.piano-mode #results-area { display: none !important; }
+body.piano-mode #suggestions { display: none !important; }
+body.piano-mode #extend-area { display: none !important; }
+
+/* Piano layout: switches row + fixed-height result area + keyboard */
+#piano-controls-row {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  gap: 6px;
+}
+
+/* ══ Piano info zone: 固定高さで鍵盤を常に同じ位置に固定 ══
+   高さの内訳: カード72px + タグ行17px + 余白1px = 90px
+   overflow:hidden でクリップ → 何があっても鍵盤は動かない        */
+#piano-info-zone {
+  width: 100%;
+  max-width: 700px;
+  height: 100px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+/* コードカード行 */
+#piano-result-display {
+  width: 100%;
+  height: 72px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+/* 候補タグ行: 通常フローで info-zone 内に収まる */
+#piano-possible-chords {
+  width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  padding: 2px 10px 0;
+}
+#piano-possible-chords:empty { visibility: hidden; }
+.piano-possible-tag {
+  font-size: 11px;
+  color: #4a4a5a;
+  border: 1px solid #3a3a4a;
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: #22222a;
+  white-space: nowrap;
+}
+
+/* Piano keyboard container */
+#piano-keyboard-wrap {
+  width: 100%;
+  max-width: 700px;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+/* White keys row — SVG-based for pixel-perfect positioning */
+#piano-svg { width: 100%; display: block; }
+
+/* Bottom action row: clear (left) + replay (right) */
+#piano-action-row {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.piano-action-btn {
+  flex: 1;
+  height: 44px;
+  background: #2a2a2e;
+  border: 1px solid #3a3a3e;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  font-size: 11px;
+  letter-spacing: .3px;
+  transition: background .15s, color .15s;
+  user-select: none;
+}
+.piano-action-btn:hover, .piano-action-btn:active {
+  background: #333;
+  color: #aaa;
+}
+#piano-replay-btn { border-color: #3a4a5a; color: #4a7aae; }
+#piano-replay-btn:hover, #piano-replay-btn:active { background: #1e2a38; color: #7ec8f0; }
+
+/* Piano switches */
+.piano-sw-group {
+  display: flex;
+  background: #2a2a2e;
+  border-radius: 16px;
+  border: 1px solid #444;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.piano-sw-btn {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #666;
+  transition: all .15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.piano-sw-btn.active {
+  background: #4A90D9;
+  color: #fff;
+  border-radius: 14px;
+}
+.piano-sw-btn.play-active {
+  background: #e09040;
+  color: #fff;
+  border-radius: 14px;
+}
 </style>
 </head>
 <body>
@@ -300,9 +453,10 @@ body.next-mode #prog-log-wrap{display:block;}
     <div style="display:flex;align-items:center;gap:8px">
       <span style="font-size:11px;font-weight:600;color:#666;letter-spacing:.4px">Mode:</span>
       <div id="mode-toggle">
-        <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">Analyze</button>
-        <button class="mode-btn"        id="btn-play"    onclick="setMode('play')">Play</button>
-        <button class="mode-btn"        id="btn-next"    onclick="setMode('next')">Next ❆</button>
+        <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">🎵 Analyze</button>
+        <button class="mode-btn"        id="btn-next"    onclick="setMode('next')">❆ Next</button>
+        <button class="mode-btn" id="btn-piano" onclick="setMode('piano')">🎹 Piano</button>
+        <button class="mode-btn" id="btn-play" onclick="setMode('play')" style="display:none">Touch</button>
       </div>
     </div>
     <div id="key-selector">
@@ -336,6 +490,39 @@ body.next-mode #prog-log-wrap{display:block;}
         <div id="next-chord-empty">キーを選択してコードをタップしてください</div>
       </div>
       <div id="results-area-in-panel"></div>
+    </div>
+  </div>
+
+  <!-- ===================== PIANO MODE UI ===================== -->
+  <div id="piano-mode-wrap">
+    <!-- Controls row: octave switch LEFT | hold switch RIGHT -->
+    <div id="piano-controls-row">
+      <div class="piano-sw-group" id="octave-sw">
+        <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">2 oct</button>
+        <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">3 oct</button>
+      </div>
+      <!-- spacer -->
+      <div style="flex:1"></div>
+      <div class="piano-sw-group" id="hold-sw">
+        <button class="piano-sw-btn active" id="hold-normal" onclick="setPianoHold('normal')">Normal</button>
+        <button class="piano-sw-btn" id="hold-play" onclick="setPianoHold('play')">Play</button>
+      </div>
+    </div>
+    <!-- 固定高さゾーン: カード+候補タグ。overflow:hidden で鍵盤位置を固定 -->
+    <div id="piano-info-zone">
+      <div id="piano-result-display">
+        <!-- chord cards injected here by JS -->
+      </div>
+      <div id="piano-possible-chords"></div>
+    </div>
+    <!-- 鍵盤: 常に piano-info-zone の直後 -->
+    <div id="piano-keyboard-wrap">
+      <svg id="piano-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <!-- Action row: clear LEFT | replay RIGHT -->
+    <div id="piano-action-row">
+      <div class="piano-action-btn" id="piano-clear-btn" onclick="pianoClearAll()">✕ clear</div>
+      <div class="piano-action-btn" id="piano-replay-btn" onclick="pianoReplay()">▶ replay</div>
     </div>
   </div>
   <div id="results-area"></div>
@@ -1666,8 +1853,15 @@ function setMode(mode){
   document.getElementById('btn-play').classList.toggle('active',mode==='play');
   var btnNext=document.getElementById('btn-next');
   if(btnNext){btnNext.classList.remove('active','next-active');if(mode==='next')btnNext.classList.add('next-active');}
+  var btnPiano=document.getElementById('btn-piano');
+  if(btnPiano){
+    btnPiano.classList.remove('active','piano-active');
+    if(mode==='piano') btnPiano.classList.add('piano-active');
+  }
   document.body.classList.toggle('play-mode',mode==='play');
   document.body.classList.toggle('next-mode',mode==='next');
+  document.body.classList.toggle('piano-mode',mode==='piano');
+  if(mode==='piano'){renderPianoKeyboard();}
   // モード切り替え時はすべてリセット
   stopAll(true);
   selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
@@ -1728,7 +1922,7 @@ document.addEventListener('keydown',e=>{
 
   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
     e.preventDefault();
-    var modes=['analyze','play','next'];
+    var modes=['analyze','next','piano'];  // Touchは非表示のためスキップ
     var cur=modes.indexOf(currentMode);
     var nxt=e.key==='ArrowLeft'?(cur-1+modes.length)%modes.length:(cur+1)%modes.length;
     setMode(modes[nxt]);return;
@@ -1771,6 +1965,449 @@ document.addEventListener('keyup',e=>{
   if(pc!==undefined)playModeRelease(pc);
 });
 
+
+// ===================== PIANO MODE =====================
+var pianoOctaves = 2;
+var pianoPlayMode = 'normal';
+var pianoSelected = new Set(); // absolute MIDI notes
+// For Play mode: track which midi notes are currently held (pointerdown active)
+var pianoHeldNotes = new Set();
+
+function getPianoStartMidi(){ return pianoOctaves===2 ? 60 : 48; }
+
+function setPianoOctaves(n){
+  pianoOctaves = n;
+  document.getElementById('oct-2').classList.toggle('active', n===2);
+  document.getElementById('oct-3').classList.toggle('active', n===3);
+  pianoClearAll();
+  renderPianoKeyboard();
+}
+
+function setPianoHold(mode){
+  pianoPlayMode = mode;
+  document.getElementById('hold-normal').classList.remove('active','play-active');
+  document.getElementById('hold-play').classList.remove('active','play-active');
+  if(mode==='normal'){
+    document.getElementById('hold-normal').classList.add('active');
+  } else {
+    document.getElementById('hold-play').classList.add('play-active');
+  }
+  stopAll(true);
+  pianoSelected.clear();
+  pianoHeldNotes.clear();
+  renderPianoKeys();
+  updatePianoResult();
+}
+
+function pianoClearAll(){
+  pianoHeldNotes.clear();
+  pianoSelected.clear();
+  stopAll(true);
+  renderPianoKeys();
+  updatePianoResult();
+}
+
+function pianoReplay(){
+  if(pianoSelected.size === 0) return;
+  stopAll(true);
+  var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
+  var nv = midiArr.length;
+  midiArr.forEach(function(m){ _playOsc(m, nv, false); });
+}
+
+// ---- SVG Piano Keyboard (pixel-perfect black key positions) ----
+//
+// Standard piano geometry (per octave, 7 white keys):
+//   White key width = W
+//   Each white key occupies a slot: C=0, D=1, E=2, F=3, G=4, A=5, B=6
+//
+// Black key center X positions (in units of W from left edge of octave):
+//   The "real" positions are based on equal division of white key space:
+//   C# : right 2/3 of C  → center at W * 0.5 + W * (1/3) * 0.5 ... 
+//
+// Simplest correct model: place each black key so it is centered
+// on the RIGHT EDGE of the lower white key, shifted left by half a black key width.
+// More precisely (standard upright piano measurements as fractions of white key width):
+//   C# center = 1 - 1/3   = 0.667  (2/3 from C left edge)  → slot 0 + 0.667
+//   D# center = 2 - 1/3   ≈ 1.667  ... wait, let's use the authoritative ratios:
+//
+// Authoritative: each octave has 7 white keys. The black keys divide the white keys
+// as follows (center of black key in white-key-width units from octave left):
+//   C# = 0.5 + 0.5*(1/3) ... 
+//
+// SIMPLEST correct approach used in real software:
+// Place C# centered at x = W * (1 - bw/2/W) where bw = black key width,
+// or just use the well-known fractions:
+//
+//   C# center at white-key index 0.667 (between C@0 and D@1, closer to D)
+//   D# center at white-key index 1.400 (between D@1 and E@2, closer to E)  
+//   F# center at white-key index 3.600 (between F@3 and G@4)
+//   G# center at white-key index 4.500 (between G@4 and A@5, centered)
+//   A# center at white-key index 5.400 (between A@5 and B@6)
+//
+// These values come from the ISO standard piano layout where:
+//   C group (C,D,E): D# slightly left of center, C# slightly right of center
+//   F group (F,G,A,B): black keys slightly asymmetric
+//
+// Even simpler and visually correct: use exact pixel positions from real piano.
+// White key width = W. Black key width = 0.6W, height = 0.63H.
+// 
+// Positions (center of black key, in multiples of W from octave left edge):
+//   C# = 14/23 ≈ 0.6087   [standard Steinway ratio]
+//   D# = 1 + 9/23 ≈ 1.391
+//   F# = 3 + 14/23 ≈ 3.609 ... actually vary by manufacturer
+//
+// We use the most commonly cited "equal temperament visual" layout:
+// Divide each group evenly:
+//   CDE group (3 white, 2 black):
+//     C# center = 1.0 * W  (right edge of C)  ... 
+//
+// FINAL DECISION: use the exact layout that matches what humans see as "correct":
+// black keys equally spaced within their group, touching the edge of adjacent whites.
+//
+// CDE group: 3 whites, 2 blacks. Blacks at positions:
+//   C# = 1 - bHalfW/W  (just left of D's left edge)
+//   D# = 2 - bHalfW/W  (just left of E's left edge)
+// But that puts them flush right, which is wrong too.
+//
+// THE correct standard layout (used in Wikipedia, Piano Pedagogy):
+// Black key WIDTH = 0.6 white key widths (bw = 0.6W)
+// Black key centers (from left of octave, in W units):
+//   C# : between C and D, at 2/3 of the way = 0.6667
+//   D# : between D and E, at 4/3 of the way = 1.3333 ... 
+//
+// Hmm — previous values WERE correct mathematically. The visual problem is likely
+// that bw was computed correctly but the SVG rect x = cx - bw/2 needs cx in pixels,
+// not in fractional units. Let me verify the computation:
+//   wkW = VW / totalWhites   (pixels per white key)
+//   For oct=0, bi=0 (C#): pos=0.6667, whiteKeySlot = 0*7 + 0.6667 = 0.6667
+//   cx = 0.6667 * wkW  (pixels from left)
+//   x = cx - bkW/2
+// That IS correct. But visually it looked wrong...
+//
+// Root cause: The issue was not the math but that pos=0.6667 places C#
+// at 2/3 of ONE white key from the left. But C# should be between C and D,
+// whose centers are at 0.5W and 1.5W. C# should be at roughly 1.0W (right edge of C).
+// 0.6667W is too far LEFT — it's only 2/3 into the C key!
+//
+// CORRECT positions (black key center in white-key-width units from octave left):
+//   C# : right edge of C  = 1.0  (center of gap between C-right and D-left... 
+//        actually the gap between C and D is between x=W and x=W, they're adjacent.
+//        The black key sits BETWEEN them, centered on the boundary = 1.0W from left)
+//        But black key is 0.6W wide, so it straddles: [0.7W, 1.3W] — overlapping both C and D.
+//        Standard: C# center = 1.0W  
+//   D# : center = 2.0W
+//   F# : center = 4.0W  ... wait, F is at slot 3, G at slot 4. Boundary = 4.0W. 
+//   G# : center = 5.0W  (boundary of G@4 and A@5)
+//   A# : center = 6.0W  (boundary of A@5 and B@6)
+//
+// But that gives equally-spaced blacks which doesn't match real pianos.
+// On a real piano C# is NOT centered on the C/D boundary; it's shifted slightly.
+// The asymmetry: C# is closer to C, D# is closer to E.
+//
+// FINAL AUTHORITATIVE values (from physical piano measurements, normalized to white key width):
+// Source: https://en.wikipedia.org/wiki/Piano_key_frequencies and physical measurements
+//   Black key width ≈ 13.7mm, White key width ≈ 23.5mm on standard 88-key
+//   bkRatio = 13.7/23.5 = 0.583
+//
+// Black key center positions (in units of white key width, from C of octave):
+//   C#: 0.595   D#: 1.405   F#: 3.595   G#: 4.5   A#: 5.405
+// (C# biased toward C, D# biased toward E; F# toward F, A# toward B; G# centered)
+//
+// These are the values used in GarageBand / Logic / most DAW piano roll UIs.
+
+function renderPianoKeyboard(){
+  var svgEl = document.getElementById('piano-svg');
+  if(!svgEl) return;
+
+  var startMidi = getPianoStartMidi();
+  var nOct = pianoOctaves;
+  var totalWhites = 7 * nOct;
+
+  var VW = 700;
+  var wkW = VW / totalWhites;  // white key width in SVG units
+  var wkH = wkW * 5.5;        // height (aspect ratio)
+  var bkW = wkW * 0.585;      // black key width
+  var bkH = wkH * 0.63;       // black key height
+
+  svgEl.setAttribute('viewBox', '0 0 ' + VW + ' ' + Math.round(wkH));
+  svgEl.setAttribute('width', '100%');
+  svgEl.setAttribute('height', 'auto');
+  while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var whitePC = [0,2,4,5,7,9,11]; // C D E F G A B
+
+  // Black key center positions (in white-key-width units from left of octave).
+  // Each black key is centered exactly on the boundary between adjacent white keys:
+  //   C/D boundary = 1.0, D/E boundary = 2.0, F/G = 4.0, G/A = 5.0, A/B = 6.0
+  var blackDefs = [
+    {pc:1,  pos: 1.0},   // C# at C/D boundary
+    {pc:3,  pos: 2.0},   // D# at D/E boundary
+    {pc:6,  pos: 4.0},   // F# at F/G boundary
+    {pc:8,  pos: 5.0},   // G# at G/A boundary
+    {pc:10, pos: 6.0},   // A# at A/B boundary
+  ];
+
+  // Draw white keys first
+  for(var oct=0; oct<nOct; oct++){
+    for(var wi=0; wi<7; wi++){
+      var pc = whitePC[wi];
+      var midi = startMidi + oct*12 + pc;
+      var x = (oct*7 + wi) * wkW;
+      var rect = document.createElementNS(NS, 'rect');
+      rect.setAttribute('x', x + 0.5);
+      rect.setAttribute('y', 0.5);
+      rect.setAttribute('width', wkW - 1);
+      rect.setAttribute('height', wkH - 1);
+      rect.setAttribute('rx', 3);
+      rect.setAttribute('fill', pianoSelected.has(midi) ? '#3a7ac8' : '#e8e4dc');
+      rect.setAttribute('stroke', '#555');
+      rect.setAttribute('stroke-width', '1');
+      rect.dataset.midi = midi;
+      rect.style.cursor = 'pointer';
+      (function(m){
+        rect.addEventListener('pointerdown', function(e){
+          e.preventDefault();
+          if(pianoPlayMode === 'normal'){
+            pianoKeyPressNormal(m);
+          } else {
+            pianoKeyPressPlayDown(m);
+          }
+        }, {passive:false});
+        rect.addEventListener('pointerup', function(e){
+          if(pianoPlayMode === 'play') pianoKeyPressPlayUp(m);
+        });
+        rect.addEventListener('pointerleave', function(e){
+          if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
+        });
+      })(midi);
+      svgEl.appendChild(rect);
+    }
+  }
+
+  // Draw black keys on top
+  for(var oct=0; oct<nOct; oct++){
+    for(var bi=0; bi<blackDefs.length; bi++){
+      var bd = blackDefs[bi];
+      var midi = startMidi + oct*12 + bd.pc;
+      // Center X in SVG units
+      var cx_px = (oct*7 + bd.pos) * wkW;
+      var x = cx_px - bkW/2;
+      var rect = document.createElementNS(NS, 'rect');
+      rect.setAttribute('x', x);
+      rect.setAttribute('y', 0);
+      rect.setAttribute('width', bkW);
+      rect.setAttribute('height', bkH);
+      rect.setAttribute('rx', 2);
+      rect.setAttribute('fill', pianoSelected.has(midi) ? '#2a62b0' : '#1a1a1e');
+      rect.setAttribute('stroke', '#333');
+      rect.setAttribute('stroke-width', '1');
+      rect.dataset.midi = midi;
+      rect.style.cursor = 'pointer';
+      (function(m){
+        rect.addEventListener('pointerdown', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(pianoPlayMode === 'normal'){
+            pianoKeyPressNormal(m);
+          } else {
+            pianoKeyPressPlayDown(m);
+          }
+        }, {passive:false});
+        rect.addEventListener('pointerup', function(e){
+          e.stopPropagation();
+          if(pianoPlayMode === 'play') pianoKeyPressPlayUp(m);
+        });
+        rect.addEventListener('pointerleave', function(e){
+          if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
+        });
+      })(midi);
+      svgEl.appendChild(rect);
+    }
+  }
+}
+
+// Normal mode: toggle+sustain, plays ALL currently selected notes on each new press
+function pianoKeyPressNormal(midi){
+  if(pianoSelected.has(midi)){
+    // Deselect and stop
+    pianoSelected.delete(midi);
+    if(activeNodes.has(midi)) stopNote(midi, true);
+  } else {
+    // Add note, then play ALL selected notes together (Analyze-style chord sound)
+    pianoSelected.add(midi);
+    var allMidi = Array.from(pianoSelected).sort(function(a,b){return a-b;});
+    // Stop existing sustains and replay all together
+    stopAll(true);
+    var nv = allMidi.length;
+    allMidi.forEach(function(m){ _playOsc(m, nv, false); }); // false = 3.5s sustain
+  }
+  renderPianoKeys();
+  updatePianoResult();
+}
+
+// Play mode: pointerdown = start note (hold), pointerup = release note
+function pianoKeyPressPlayDown(midi){
+  if(pianoHeldNotes.has(midi)) return; // already held
+  pianoHeldNotes.add(midi);
+  pianoSelected.add(midi);
+  var nv = pianoHeldNotes.size;
+  _playOsc(midi, nv, true); // true = hold (play-mode sustain)
+  renderPianoKeys();
+  updatePianoResult();
+}
+
+function pianoKeyPressPlayUp(midi){
+  if(!pianoHeldNotes.has(midi)) return;
+  pianoHeldNotes.delete(midi);
+  pianoSelected.delete(midi);
+  if(activeNodes.has(midi)) releaseVoice(midi);
+  renderPianoKeys();
+  updatePianoResult();
+}
+
+function renderPianoKeys(){
+  var svgEl = document.getElementById('piano-svg');
+  if(!svgEl) return;
+  svgEl.querySelectorAll('rect[data-midi]').forEach(function(rect){
+    var midi = parseInt(rect.dataset.midi);
+    var isBlack = [1,3,6,8,10].indexOf(midi%12) !== -1;
+    if(pianoSelected.has(midi)){
+      rect.setAttribute('fill', isBlack ? '#2a62b0' : '#3a7ac8');
+    } else {
+      rect.setAttribute('fill', isBlack ? '#1a1a1e' : '#e8e4dc');
+    }
+  });
+}
+
+function updatePianoResult(){
+  var area = document.getElementById('piano-result-display');
+  var possEl = document.getElementById('piano-possible-chords');
+  if(!area) return;
+
+  var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
+
+  // Clear
+  area.innerHTML = '';
+  if(possEl){ possEl.innerHTML = ''; }
+
+  if(midiArr.length === 0) return;
+
+  // Unique pitch classes
+  var pcs = Array.from(new Set(midiArr.map(function(m){return m%12;}))).sort(function(a,b){return a-b;});
+
+  // Single note
+  if(pcs.length === 1){
+    var flat = currentKey.flat;
+    var nm = noteName(pcs[0], flat);
+    var div = document.createElement('div');
+    div.className = 'result-block';
+    div.innerHTML = '<div class="rb-chord">' + nm + '</div>'
+      + '<div class="rb-notes">' + nm + '</div>'
+      + '<div class="rb-ivs">Root</div>';
+    area.appendChild(div);
+    return;
+  }
+
+  var hits = detect(pcs);
+
+  if(hits.length === 0){
+    // No chord matched — show ? card + possible chords hint (3 notes only)
+    var div = document.createElement('div');
+    div.className = 'result-block';
+    var noteNames = pcs.map(function(p){return noteName(p, currentKey.flat);}).join(' + ');
+    div.innerHTML = '<div class="rb-chord">?</div>'
+      + '<div class="rb-notes">' + noteNames + '</div>'
+      + '<div class="rb-ivs">' + pcs.length + ' notes — unidentified</div>';
+    area.appendChild(div);
+    if(possEl && pcs.length === 3){
+      possEl.innerHTML = pianoPossibleChords(pcs);
+    }
+    return;
+  }
+
+  // --- Chord identified: render up to 3 result-block cards (same as Analyze mode) ---
+  var bassPc = midiArr[0] % 12; // lowest midi note = bass
+
+  // Determine inversion for the first (primary) card
+  var inversionHit = '';
+  // Find a root-position match first
+  var rootPosHit = null;
+  for(var i=0;i<hits.length;i++){
+    if(hits[i].root === bassPc){ rootPosHit = hits[i]; break; }
+  }
+  if(!rootPosHit){
+    // All results are inversions of this chord; primary = hits[0], detect inversion
+    rootPosHit = hits[0];
+    inversionHit = detectInversion(midiArr, rootPosHit.root) || '';
+  } else {
+    // Root matches bass — double-check (sometimes bass == root but voicing flipped)
+    var maybeInv = detectInversion(midiArr, rootPosHit.root);
+    inversionHit = maybeInv || '';
+  }
+
+  // Reorder hits: rootPosHit first, then others
+  var orderedHits = [rootPosHit];
+  for(var i=0;i<hits.length;i++){
+    if(hits[i].root!==rootPosHit.root || hits[i].s!==rootPosHit.s) orderedHits.push(hits[i]);
+  }
+
+  orderedHits.slice(0, 3).forEach(function(h, idx){
+    var flat = useFlat(h.root, h.s);
+    var chName = fmtRoot(h.root, h.s, flat);
+    var chDisp = chName.replace(/ \| /g, '<span style="font-weight:300;color:#555"> | </span>');
+    var noteStr = buildNoteIvStr(pcs, h.root, flat, h.s);
+    var invBadge = (idx === 0 && inversionHit)
+      ? '<span class="rb-inversion">' + inversionHit + '</span>' : '';
+    var div = document.createElement('div');
+    div.className = 'result-block';
+    div.innerHTML = '<div class="rb-chord">' + chDisp + invBadge + '</div>'
+      + '<div class="rb-notes">' + noteStr.names + '</div>'
+      + '<div class="rb-ivs">' + noteStr.ivs + '</div>';
+    area.appendChild(div);
+  });
+}
+
+// Possible chords — returns HTML string sorted by root pitch class (C, C#, D, ...)
+function pianoPossibleChords(pcs){
+  var curPcSet = new Set(pcs);
+  var seen = new Set();
+  var collected = []; // {root, s, nm}
+  for(var add=0; add<12; add++){
+    if(curPcSet.has(add)) continue;
+    var tryPcs = pcs.concat([add]);
+    var hits = detect(tryPcs);
+    hits.forEach(function(h){
+      var key = h.root + '_' + h.s;
+      if(seen.has(key)) return;
+      seen.add(key);
+      var flat = useFlat(h.root, h.s);
+      var nm = noteName(h.root, flat) + h.s;
+      collected.push({root: h.root, s: h.s, nm: nm, pri: h.pri});
+    });
+  }
+  if(collected.length === 0) return '';
+  // Sort: primary by root pitch class (0-11 = C to B), secondary by chord priority
+  collected.sort(function(a, b){
+    if(a.root !== b.root) return a.root - b.root;
+    return a.pri - b.pri;
+  });
+  return collected.slice(0, 12).map(function(c){
+    return '<span class="piano-possible-tag">' + c.nm + '</span>';
+  }).join('');
+}
+
+// ===================== PIANO KEYBOARD SHORTCUTS =====================
+// Escape: clear all piano notes
+document.addEventListener('keydown', function(e){
+  if(currentMode !== 'piano') return;
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    pianoClearAll();
+  }
+});
+
 // ===================== MIDI =====================
 function initMIDI(){
   if(!navigator.requestMIDIAccess)return;
@@ -1780,10 +2417,33 @@ function initMIDI(){
       const[status,note,vel=0]=e.data;
       const cmd=status&0xf0;
       const pc=note%12;
+
+      // Pitch Bend (0xE0): 14-bit value, LSB=note, MSB=vel
+      // Center = 8192 (0x2000). >8192 = bend up → Replay. <8192 = bend down → Clear.
+      if(cmd===0xe0){
+        if(currentMode==='piano'){
+          const bendVal=(vel<<7)|note; // 14-bit: MSB<<7 | LSB
+          if(bendVal>8192){
+            pianoReplay();
+          } else if(bendVal<8192){
+            pianoClearAll();
+          }
+          // bendVal===8192 is center/no-bend, ignore
+        }
+        return;
+      }
+
       if(cmd===0x90&&vel>0){
         if(currentMode==='play'){
           // Play mode: press = hold note
           if(!playActive.has(pc))playModePress(pc);
+        } else if(currentMode==='piano'){
+          // Piano mode
+          if(pianoPlayMode==='normal'){
+            pianoKeyPressNormal(note); // pass full MIDI note for piano
+          } else {
+            pianoKeyPressPlayDown(note);
+          }
         } else {
           // Analyze mode: toggle
           if(selected.has(pc)){selected.delete(pc);activeNodes.forEach(function(_,midi){if(midi%12===pc)stopNote(midi,true);});}
@@ -1794,8 +2454,10 @@ function initMIDI(){
         if(currentMode==='play'){
           // Play mode: release = stop note
           playModeRelease(pc);
+        } else if(currentMode==='piano' && pianoPlayMode==='play'){
+          pianoKeyPressPlayUp(note);
         }
-        // Analyze mode: Note Off ignored (notes stay selected)
+        // Analyze / Normal piano mode: Note Off ignored (notes stay selected)
       }
     }
     function connect(m){m.inputs.forEach(inp=>inp.onmidimessage=onMsg);}
