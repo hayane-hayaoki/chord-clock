@@ -239,7 +239,7 @@ body.piano-mode .rb-inversion{display:inline-block;}
 }
 .mood-btn:hover{color:#aaa;border-color:#555;}
 .mood-btn.mood-active{color:#fff;}
-.mood-btn[data-mood="universal"].mood-active{background:#4a5568;border-color:#718096;}
+.mood-btn[data-mood="universal"].mood-active{background:#a07800;border-color:#f0c000;}
 .mood-btn[data-mood="pop"].mood-active{background:#c04040;border-color:#e07070;}
 .mood-btn[data-mood="minor"].mood-active{background:#553a7a;border-color:#8b6abf;}
 .mood-btn[data-mood="rock"].mood-active{background:#1a1a1a;border-color:#888;}
@@ -483,7 +483,7 @@ body.piano-mode #extend-area { display: none !important; }
       <div id="mood-selector">
         <button class="mood-btn mood-active" data-mood="universal" onclick="setMood('universal')">🎵 万能</button>
         <button class="mood-btn" data-mood="pop" onclick="setMood('pop')">☀️ ポップ</button>
-        <button class="mood-btn" data-mood="minor" onclick="setMood('minor')">🌙 マイナー</button>
+        <button class="mood-btn" data-mood="minor" onclick="setMood('minor')">🌙 バラード</button>
         <button class="mood-btn" data-mood="rock" onclick="setMood('rock')">⚡ ロック</button>
         <button class="mood-btn" data-mood="cinematic" onclick="setMood('cinematic')">🎬 シネマ</button>
       </div>
@@ -1945,9 +1945,73 @@ function resetAll(){
 }
 
 // ===================== KEYBOARD =====================
-const KEY_MAP={'Digit1':0,'Digit2':2,'Digit3':4,'Digit4':5,'Digit5':7,'Digit6':9,'Digit7':11,'Digit8':0,'F1':1,'F2':3,'F4':6,'F5':8,'F6':10};
+// ---------------------------------------------------------------------------
+// New keyboard layout (Apple US keyboard):
+//
+//  White keys (toggle / play note — pitch class):
+//   ` → B(11)   1→C(0)  2→D(2)  3→E(4)  4→F(5)  5→G(7)  6→A(9)  7→B(11)
+//   8→C(0+oct) 9→D(2+oct) 0→E(4+oct) -→F(5+oct) =→G(7+oct)
+//
+//  Black keys (toggle / play note — pitch class):
+//   F1→C♯/D♭(1)  F2→D♯/E♭(3)  F4→F♯/G♭(6)  F5→G♯/A♭(8)  F6→A♯/B♭(10)
+//   F8→C♯/D♭(1)  F9→D♯/E♭(3)  F11→F♯/G♭(6) F12→G♯/A♭(8)
+//
+//  Replay (play currently selected notes again):
+//   F3, F7, F10
+//
+//  All shortcuts use preventDefault() to override browser defaults.
+// ---------------------------------------------------------------------------
 
-document.addEventListener('keydown',function(e){
+// Map: e.code → pitch class (0-11)
+// For white keys that appear in 2nd octave (8,9,0,-,=) we use the same pc
+// but mark them so Play mode can distinguish octave if needed.
+// In Analyze/Next mode, pc-based toggle means toggling the same note twice
+// with the same pc is idempotent — pressing 1 and 8 both map to C(0) so they
+// act as one note. That is intentional and consistent with the original design.
+const KEY_MAP_PC = {
+  // ` key — B just below the start octave (B3 in 2-oct piano mode)
+  'Backquote': 11,  // B
+  // Row 1-7: C D E F G A B (1st octave)
+  'Digit1': 0,   // C
+  'Digit2': 2,   // D
+  'Digit3': 4,   // E
+  'Digit4': 5,   // F
+  'Digit5': 7,   // G
+  'Digit6': 9,   // A
+  'Digit7': 11,  // B
+  // Row 8-= : C D E F G (2nd octave white keys)
+  'Digit8': 0,   // C
+  'Digit9': 2,   // D
+  'Digit0': 4,   // E
+  'Minus':  5,   // F
+  'Equal':  7,   // G
+  // Black keys via F-keys (1st octave group)
+  'F1':  1,   // C♯/D♭
+  'F2':  3,   // D♯/E♭
+  'F4':  6,   // F♯/G♭
+  'F5':  8,   // G♯/A♭
+  'F6':  10,  // A♯/B♭
+  // Black keys via F-keys (2nd octave group)
+  'F8':  1,   // C♯/D♭
+  'F9':  3,   // D♯/E♭
+  // NOTE: F11 on macOS is bound to "Show Desktop" (Mission Control).
+  // The OS intercepts F11 before the browser, so e.preventDefault() has no effect.
+  // To use F11 as a shortcut, disable it in:
+  //   System Settings → Desktop & Dock → Mission Control → "Show Desktop" → set to "-"
+  'F11': 6,   // F♯/G♭
+  'F12': 8,   // G♯/A♭
+};
+
+// Replay keys (F3, F7, F10)
+const REPLAY_KEYS = new Set(['F3','F7','F10']);
+
+// Legacy KEY_MAP kept for internal references (piano mode uses e.code-based lookup)
+const KEY_MAP = KEY_MAP_PC;
+
+// Use capture phase so F-keys (F1=help, F3=find, F5=reload…) are intercepted
+// before the browser acts on them. Both keydown and keyup use capture:true.
+(function(){
+var _keydownHandler = function(e){
   // --- Arrow keys: work in ALL modes ---
   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
     e.preventDefault();
@@ -1975,23 +2039,40 @@ document.addEventListener('keydown',function(e){
     return;
   }
 
+  // --- Tab key: replay in ALL modes ---
+  if(e.code === 'Tab'){
+    e.preventDefault();
+    if(currentMode==='piano'){
+      pianoReplay();
+    } else {
+      if(selected.size>0) playSelected();
+    }
+    return;
+  }
+
+  // --- Replay keys: F3, F7, F10 (all modes) ---
+  if(REPLAY_KEYS.has(e.key)){
+    e.preventDefault();
+    if(currentMode==='piano'){
+      pianoReplay();
+    } else {
+      if(selected.size>0) playSelected();
+    }
+    return;
+  }
+
   // --- Piano mode keyboard shortcuts ---
   if(currentMode === 'piano'){
-    // Escape / F9 / Backspace(Mac Delete): clear all selected
-    if(e.key === 'Escape' || e.key === 'F9' || e.code === 'Backspace'){
+    // Escape / Backspace(Mac Delete): clear all selected
+    if(e.key === 'Escape' || e.code === 'Backspace'){
       e.preventDefault();
       pianoClearAll();
       return;
     }
-    // Space / F8 / Digit9: replay
-    if(e.code === 'Space' || e.key === 'F8' || e.code === 'Digit9'){
+    // Space: replay
+    if(e.code === 'Space'){
       e.preventDefault();
       pianoReplay();
-      return;
-    }
-    // F3 / F7: no action
-    if(e.key === 'F3' || e.key === 'F7'){
-      e.preventDefault();
       return;
     }
     // Slash: cycle octave 1→2→3→1
@@ -2007,13 +2088,21 @@ document.addEventListener('keydown',function(e){
       setPianoHold(pianoPlayMode === 'normal' ? 'play' : 'normal');
       return;
     }
-    // Note keys
-    var kbPc = KEY_MAP[e.code];
+    // Note keys (piano mode) — use KEY_MAP_PC
+    var kbPc = KEY_MAP_PC[e.code];
     if(kbPc !== undefined){
       e.preventDefault();
       if(e.repeat) return;
-      // Digit8 → 1 octave above base C
-      var kbMidi = (e.code === 'Digit8') ? (60 + 12) : (60 + kbPc);
+      var startMidi = getPianoStartMidi(); // 60 for 2-oct, 48 for 3-oct
+      var kbMidi;
+      if(e.code === 'Backquote'){
+        // ` = B just below the start octave (B3=59 when startMidi=60)
+        kbMidi = startMidi - 1;
+      } else {
+        // 2nd-octave codes: white keys 8/9/0/-/= and black keys F8/F9/F11/F12
+        var secondOctCodes = new Set(['Digit8','Digit9','Digit0','Minus','Equal','F8','F9','F11','F12']);
+        kbMidi = secondOctCodes.has(e.code) ? (startMidi + 12 + kbPc) : (startMidi + kbPc);
+      }
       if(pianoPlayMode === 'normal'){
         pianoKeyPressNormal(kbMidi);
       } else {
@@ -2034,42 +2123,60 @@ document.addEventListener('keydown',function(e){
     return;
   }
   if(e.key==='Escape'||e.code==='Backspace'){e.preventDefault();resetAll();return;}
-  if(e.code==='Space'||e.key==='F3'||e.key==='F7'||e.key==='F8'||e.code==='Digit9'){
+  if(e.code==='Space'){
     e.preventDefault();
     if(selected.size>0) playSelected();
     return;
   }
-  // F9: deselect all
-  if(e.key==='F9'){e.preventDefault();resetAll();return;}
 
-  var anPc=KEY_MAP[e.code];
-  if(anPc===undefined)return;
+  // Note keys (Analyze / Next / Play modes)
+  var anPc = KEY_MAP_PC[e.code];
+  if(anPc === undefined) return;
   e.preventDefault();
-  if(e.repeat)return;
+  if(e.repeat) return;
   if(currentMode==='play'){
-    if(!playActive.has(anPc))playModePress(anPc);
+    if(!playActive.has(anPc)) playModePress(anPc);
   } else {
-    if(selected.has(anPc)){selected.delete(anPc);activeNodes.forEach(function(_,midi){if(midi%12===anPc)stopNote(midi,true);});}
-    else{selected.add(anPc);playSelected();}
+    if(selected.has(anPc)){
+      selected.delete(anPc);
+      selectedOrder = selectedOrder.filter(function(n){ return n !== anPc; });
+      activeNodes.forEach(function(_,midi){ if(midi%12===anPc) stopNote(midi,true); });
+    } else {
+      selected.add(anPc);
+      selectedOrder.push(anPc);
+      playSelected();
+    }
     updateAll();
   }
-});
+};
 
-document.addEventListener('keyup',function(e){
+var _keyupHandler = function(e){
   if(currentMode === 'piano'){
     if(pianoPlayMode === 'play'){
-      var upPc = KEY_MAP[e.code];
+      var upPc = KEY_MAP_PC[e.code];
       if(upPc !== undefined){
-        var upMidi = (e.code === 'Digit8') ? (60 + 12) : (60 + upPc);
+        var startMidi = getPianoStartMidi();
+        var upMidi;
+        if(e.code === 'Backquote'){
+          upMidi = startMidi - 1;
+        } else {
+          var secondOctCodes = new Set(['Digit8','Digit9','Digit0','Minus','Equal','F8','F9','F11','F12']);
+          upMidi = secondOctCodes.has(e.code) ? (startMidi + 12 + upPc) : (startMidi + upPc);
+        }
         pianoKeyPressPlayUp(upMidi);
       }
     }
     return;
   }
-  if(currentMode!=='play')return;
-  var relPc=KEY_MAP[e.code];
-  if(relPc!==undefined)playModeRelease(relPc);
-});
+  if(currentMode!=='play') return;
+  var relPc = KEY_MAP_PC[e.code];
+  if(relPc !== undefined) playModeRelease(relPc);
+};
+
+// Register with capture:true so F-keys are intercepted before browser acts on them
+document.addEventListener('keydown', _keydownHandler, true);
+document.addEventListener('keyup',   _keyupHandler,   true);
+})();
 // ===================== PIANO MODE =====================
 var pianoOctaves = 2;
 var pianoPlayMode = 'normal';
