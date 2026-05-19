@@ -194,7 +194,7 @@ body.next-mode .rb-inversion{display:inline-block;}
 body.piano-mode .rb-inversion{display:inline-block;}
 #vl-register{font-size:9px;color:#555;text-align:left;padding:2px 0 0;letter-spacing:.2px;min-height:14px;}
 #next-chord-header{
-  font-size:10px;font-weight:700;color:#888;letter-spacing:.8px;text-transform:uppercase;
+  font-size:10px;font-weight:400;color:#888;letter-spacing:.5px;
   text-align:left;margin-bottom:4px;padding-bottom:4px;
   border-bottom:1px solid #2a2a2e;
 }
@@ -210,12 +210,12 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .nc-section-desc{font-size:9px;color:#555;white-space:nowrap;}
 .nc-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;}
 .nc-tag{
-  font-size:12px;font-weight:600;border-radius:6px;padding:4px 10px;
+  font-size:11px;font-weight:600;border-radius:6px;padding:3px 8px;
   cursor:pointer;border:1px solid transparent;transition:all .15s;user-select:none;
   display:flex;flex-direction:column;align-items:flex-start;gap:1px;
 }
 .nc-tag:active{transform:scale(.95);}
-.nc-tag-name{font-size:12px;font-weight:700;line-height:1.1;}
+.nc-tag-name{font-size:11px;font-weight:700;line-height:1.1;}
 .nc-tag-desc{font-size:9px;font-weight:400;opacity:.65;line-height:1.1;}
 .nc-tag.g1{color:#7ec8f0;background:rgba(126,200,240,.07);border-color:rgba(126,200,240,.25);}
 .nc-tag.g1:hover{background:rgba(126,200,240,.16);border-color:rgba(126,200,240,.5);}
@@ -225,8 +225,8 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .nc-tag.g3:hover{background:rgba(224,160,96,.16);border-color:rgba(224,160,96,.5);}
 .nc-tag.nc-playing{box-shadow:0 0 0 2px currentColor;}
 #next-chord-empty{text-align:left;color:#555;font-size:12px;padding:18px 0;}
-.mode-btn.next-active{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-radius:18px;}
-.mode-btn.piano-active{background:linear-gradient(135deg,#9aa8b8,#6a7a8a);color:#fff;border-radius:18px;box-shadow:0 0 0 1px rgba(200,210,220,.3);}
+.mode-btn.next-active{background:#4A90D9;color:#fff;border-radius:18px;}
+.mode-btn.piano-active{background:#4A90D9;color:#fff;border-radius:18px;}
 /* MOOD SELECTOR */
 #mood-selector{
   display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-start;
@@ -412,8 +412,8 @@ body.piano-mode #extend-area { display: none !important; }
   background: #333;
   color: #aaa;
 }
-#piano-replay-btn { border-color: #3a4a5a; color: #4a7aae; }
-#piano-replay-btn:hover, #piano-replay-btn:active { background: #1e2a38; color: #7ec8f0; }
+#piano-replay-btn { border-color: #3a3a3e; color: #555; }
+#piano-replay-btn:hover, #piano-replay-btn:active { background: #333; color: #aaa; }
 
 /* Piano switches */
 .piano-sw-group {
@@ -443,7 +443,7 @@ body.piano-mode #extend-area { display: none !important; }
   border-radius: 14px;
 }
 .piano-sw-btn.play-active {
-  background: #e09040;
+  background: #4A90D9;
   color: #fff;
   border-radius: 14px;
 }
@@ -455,8 +455,8 @@ body.piano-mode #extend-area { display: none !important; }
     <div style="display:flex;align-items:center;gap:8px">
       <span style="font-size:11px;font-weight:600;color:#666;letter-spacing:.4px">Mode:</span>
       <div id="mode-toggle">
-        <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">🎵 Analyze</button>
-        <button class="mode-btn"        id="btn-next"    onclick="setMode('next')">❆ Next</button>
+        <button class="mode-btn active" id="btn-analyze" onclick="setMode('analyze')">🔍 Analyze</button>
+        <button class="mode-btn"        id="btn-next"    onclick="setMode('next')">📝 Next</button>
         <button class="mode-btn" id="btn-piano" onclick="setMode('piano')">🎹 Piano</button>
         <button class="mode-btn" id="btn-play" onclick="setMode('play')" style="display:none">Touch</button>
       </div>
@@ -479,7 +479,7 @@ body.piano-mode #extend-area { display: none !important; }
       <div id="prog-log-wrap"><div id="prog-log-inner"></div></div>
     </div>
     <div id="next-chord-panel">
-      <div id="next-chord-header">❆ Next Chord — 次のコードはどこへ？</div>
+      <div id="next-chord-header">Next Chord — Where to go next?</div>
       <div id="mood-selector">
         <button class="mood-btn mood-active" data-mood="universal" onclick="setMood('universal')">🎵 万能</button>
         <button class="mood-btn" data-mood="pop" onclick="setMood('pop')">☀️ ポップ</button>
@@ -500,6 +500,7 @@ body.piano-mode #extend-area { display: none !important; }
     <!-- Controls row: octave switch LEFT | hold switch RIGHT -->
     <div id="piano-controls-row">
       <div class="piano-sw-group" id="octave-sw">
+        <button class="piano-sw-btn" id="oct-1" onclick="setPianoOctaves(1)">1 oct</button>
         <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">2 oct</button>
         <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">3 oct</button>
       </div>
@@ -1575,8 +1576,8 @@ function renderSlices(){
     if(isSel&&isHeld){
       fill='#74b8f0';stroke='#74b8f0';sw='1'; // play mode: brighter while held
     } else if(isSel){
-      fill=currentMode==='next'?'#7c5cbf':'#4A90D9';
-      stroke=currentMode==='next'?'#7c5cbf':'#4A90D9';sw='1';
+      fill=currentMode==='next'?'#4A90D9':'#4A90D9';
+      stroke=currentMode==='next'?'#4A90D9':'#4A90D9';sw='1';
     } else if(BLACK.has(i)){
       fill='#2a2826';stroke='#444';sw='1';
     } else {
@@ -1763,8 +1764,13 @@ function updateResults(){
     slEl.textContent='';slistEl.innerHTML='';return;
   }
   if(hits.length>0){
+    // Sort by root pitch class: C(0) → C#(1) → D(2) → ... → B(11), then by chord priority
+    var sortedHits = hits.slice().sort(function(a,b){
+      if(a.root !== b.root) return a.root - b.root;
+      return a.pri - b.pri;
+    });
     // Show matched chords (up to 3)
-    hits.slice(0,3).forEach(h=>{
+    sortedHits.slice(0,3).forEach(h=>{
       const flat=useFlat(h.root,h.s);
       const chName=fmtRoot(h.root,h.s,flat);
       const{names,ivs}=buildNoteIvStr(sel,h.root,flat,h.s);
@@ -1784,7 +1790,11 @@ function updateResults(){
       extArea.style.display='';
       extLabel.textContent='Add one more note…';
       extList.innerHTML='';
-      exts.forEach(e=>{
+      const extsSorted=exts.slice().sort(function(a,b){
+        if(a.root!==b.root)return a.root-b.root;
+        return a.pri-b.pri;
+      });
+      extsSorted.forEach(e=>{
         const flat=useFlat(e.root,e.s);
         const rn=fmtRoot(e.root,e.s,flat).replace(' | ','<span style="font-weight:300;color:#606068"> | </span>');
         const tag=document.createElement('span');
@@ -1810,7 +1820,11 @@ function updateResults(){
         extArea.style.display='';
         extLabel.textContent='Add one more note…';
         extList.innerHTML='';
-        sugs.forEach(s=>{
+        const sugsSorted=sugs.slice().sort(function(a,b){
+          if(a.root!==b.root)return a.root-b.root;
+          return a.pri-b.pri;
+        });
+        sugsSorted.forEach(s=>{
           const flat=useFlat(s.root,s.s);
           const rn=fmtRoot(s.root,s.s,flat).replace(' | ','<span style="font-weight:300;color:#606068"> | </span>');
           const tag=document.createElement('span');
@@ -1832,8 +1846,12 @@ function updateResults(){
     }
     else{slEl.textContent='';}
     if(sugsFor&&sugsFor.length>0){
-      slistEl.innerHTML=sugsFor.map(s=>{const flat=useFlat(s.root,s.s);const rn=fmtRoot(s.root,s.s,flat).replace(' | ','<span style="font-weight:300;color:#444"> | </span>');return`<span class="sug-tag">${rn}</span>`;}).join('');
-      sugsFor.forEach(s=>{
+      const sugsForSorted=sugsFor.slice().sort(function(a,b){
+        if(a.root!==b.root)return a.root-b.root;
+        return a.pri-b.pri;
+      });
+      slistEl.innerHTML=sugsForSorted.map(s=>{const flat=useFlat(s.root,s.s);const rn=fmtRoot(s.root,s.s,flat).replace(' | ','<span style="font-weight:300;color:#444"> | </span>');return`<span class="sug-tag">${rn}</span>`;}).join('');
+      sugsForSorted.forEach(s=>{
         for(let n=0;n<12;n++){
           if(selected.has(n))continue;
           if(detect([...sel,n]).some(h=>h.root===s.root&&h.s===s.s))sugHL.add(n);
@@ -1928,55 +1946,122 @@ function resetAll(){
 
 // ===================== KEYBOARD =====================
 const KEY_MAP={'Digit1':0,'Digit2':2,'Digit3':4,'Digit4':5,'Digit5':7,'Digit6':9,'Digit7':11,'Digit8':0,'F1':1,'F2':3,'F4':6,'F5':8,'F6':10};
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){e.preventDefault();resetAll();return;}
 
+document.addEventListener('keydown',function(e){
+  // --- Arrow keys: work in ALL modes ---
   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
     e.preventDefault();
-    var modes=['analyze','next','piano'];  // Touchは非表示のためスキップ
-    var cur=modes.indexOf(currentMode);
-    var nxt=e.key==='ArrowLeft'?(cur-1+modes.length)%modes.length:(cur+1)%modes.length;
-    setMode(modes[nxt]);return;
+    var modes=['analyze','next','piano'];
+    var curIdx=modes.indexOf(currentMode);
+    var nxtIdx=e.key==='ArrowLeft'?(curIdx-1+modes.length)%modes.length:(curIdx+1)%modes.length;
+    setMode(modes[nxtIdx]);return;
   }
-
-  // Arrow Up/Down: move key signature up/down
   if(e.key==='ArrowUp'||e.key==='ArrowDown'){
     e.preventDefault();
-    const cur=+ksel.value;
-    const next=e.key==='ArrowUp'
-      ? Math.max(0,cur-1)
-      : Math.min(KEY_SIGS.length-1,cur+1);
-    if(next!==cur){
-      ksel.value=next;
-      ksel.dispatchEvent(new Event('change'));
+    var curK=+ksel.value;
+    var nextK=e.key==='ArrowUp'?Math.max(0,curK-1):Math.min(KEY_SIGS.length-1,curK+1);
+    if(nextK!==curK){ksel.value=nextK;ksel.dispatchEvent(new Event('change'));}
+    return;
+  }
+
+  // --- Enter key: replay in ALL modes ---
+  if(e.code==='Enter'){
+    e.preventDefault();
+    if(currentMode==='piano'){
+      pianoReplay();
+    } else {
+      if(selected.size>0) playSelected();
     }
     return;
   }
 
-  if(e.code==='Space'||e.key==='F3'||e.key==='F7'){
-    e.preventDefault();
-    if(currentMode==='analyze'&&selected.size>0)playSelected();
+  // --- Piano mode keyboard shortcuts ---
+  if(currentMode === 'piano'){
+    // Escape / F9 / Backspace(Mac Delete): clear all selected
+    if(e.key === 'Escape' || e.key === 'F9' || e.code === 'Backspace'){
+      e.preventDefault();
+      pianoClearAll();
+      return;
+    }
+    // Space / F8 / Digit9: replay
+    if(e.code === 'Space' || e.key === 'F8' || e.code === 'Digit9'){
+      e.preventDefault();
+      pianoReplay();
+      return;
+    }
+    // F3 / F7: no action
+    if(e.key === 'F3' || e.key === 'F7'){
+      e.preventDefault();
+      return;
+    }
+    // Slash: cycle octave 1→2→3→1
+    if(e.code === 'Slash'){
+      e.preventDefault();
+      var nextOct = pianoOctaves === 1 ? 2 : pianoOctaves === 2 ? 3 : 1;
+      setPianoOctaves(nextOct);
+      return;
+    }
+    // Right Shift: toggle Normal / Play
+    if(e.code === 'ShiftRight'){
+      e.preventDefault();
+      setPianoHold(pianoPlayMode === 'normal' ? 'play' : 'normal');
+      return;
+    }
+    // Note keys
+    var kbPc = KEY_MAP[e.code];
+    if(kbPc !== undefined){
+      e.preventDefault();
+      if(e.repeat) return;
+      // Digit8 → 1 octave above base C
+      var kbMidi = (e.code === 'Digit8') ? (60 + 12) : (60 + kbPc);
+      if(pianoPlayMode === 'normal'){
+        pianoKeyPressNormal(kbMidi);
+      } else {
+        if(!pianoHeldNotes.has(kbMidi)) pianoKeyPressPlayDown(kbMidi);
+      }
+      return;
+    }
     return;
   }
-  const pc=KEY_MAP[e.code];
-  if(pc===undefined)return;
+
+  // --- Analyze / Next / Play mode keyboard shortcuts ---
+  if(e.key==='Escape'||e.code==='Backspace'){e.preventDefault();resetAll();return;}
+  if(e.code==='Space'||e.key==='F3'||e.key==='F7'||e.key==='F8'||e.code==='Digit9'){
+    e.preventDefault();
+    if(selected.size>0) playSelected();
+    return;
+  }
+  // F9: deselect all
+  if(e.key==='F9'){e.preventDefault();resetAll();return;}
+
+  var anPc=KEY_MAP[e.code];
+  if(anPc===undefined)return;
   e.preventDefault();
-  if(e.repeat)return; // ignore key-repeat events entirely
+  if(e.repeat)return;
   if(currentMode==='play'){
-    if(!playActive.has(pc))playModePress(pc);
+    if(!playActive.has(anPc))playModePress(anPc);
   } else {
-    if(selected.has(pc)){selected.delete(pc);activeNodes.forEach(function(_,midi){if(midi%12===pc)stopNote(midi,true);});}
-    else{selected.add(pc);playSelected();}
+    if(selected.has(anPc)){selected.delete(anPc);activeNodes.forEach(function(_,midi){if(midi%12===anPc)stopNote(midi,true);});}
+    else{selected.add(anPc);playSelected();}
     updateAll();
   }
 });
-document.addEventListener('keyup',e=>{
+
+document.addEventListener('keyup',function(e){
+  if(currentMode === 'piano'){
+    if(pianoPlayMode === 'play'){
+      var upPc = KEY_MAP[e.code];
+      if(upPc !== undefined){
+        var upMidi = (e.code === 'Digit8') ? (60 + 12) : (60 + upPc);
+        pianoKeyPressPlayUp(upMidi);
+      }
+    }
+    return;
+  }
   if(currentMode!=='play')return;
-  const pc=KEY_MAP[e.code];
-  if(pc!==undefined)playModeRelease(pc);
+  var relPc=KEY_MAP[e.code];
+  if(relPc!==undefined)playModeRelease(relPc);
 });
-
-
 // ===================== PIANO MODE =====================
 var pianoOctaves = 2;
 var pianoPlayMode = 'normal';
@@ -1984,10 +2069,11 @@ var pianoSelected = new Set(); // absolute MIDI notes
 // For Play mode: track which midi notes are currently held (pointerdown active)
 var pianoHeldNotes = new Set();
 
-function getPianoStartMidi(){ return pianoOctaves===2 ? 60 : 48; }
+function getPianoStartMidi(){ return pianoOctaves===3 ? 48 : 60; }
 
 function setPianoOctaves(n){
   pianoOctaves = n;
+  document.getElementById('oct-1').classList.toggle('active', n===1);
   document.getElementById('oct-2').classList.toggle('active', n===2);
   document.getElementById('oct-3').classList.toggle('active', n===3);
   pianoClearAll();
@@ -2137,6 +2223,16 @@ function renderPianoKeyboard(){
 
   var VW = 700;
   var wkW = VW / totalWhites;  // white key width in SVG units
+  // For 1oct: limit size (roughly between 2oct and 3oct), center it
+  var svgWidth = VW;
+  var offsetX = 0;
+  if(nOct === 1){
+    // 2oct keyboard width for 14 white keys → wkW*14 total = VW
+    // 1oct: make it slightly larger than 2oct per-key, but total ~55% of VW
+    wkW = VW / 14 * 1.25; // slightly larger than 2oct key width
+    var kbWidth = wkW * 7;
+    offsetX = (VW - kbWidth) / 2;
+  }
   var wkH = wkW * 5.5;        // height (aspect ratio)
   var bkW = wkW * 0.585;      // black key width
   var bkH = wkH * 0.63;       // black key height
@@ -2145,8 +2241,6 @@ function renderPianoKeyboard(){
   svgEl.setAttribute('width', '100%');
   svgEl.setAttribute('height', 'auto');
   while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
-
-  var NS = 'http://www.w3.org/2000/svg';
   var whitePC = [0,2,4,5,7,9,11]; // C D E F G A B
 
   // Black key center positions (in white-key-width units from left of octave).
@@ -2165,7 +2259,7 @@ function renderPianoKeyboard(){
     for(var wi=0; wi<7; wi++){
       var pc = whitePC[wi];
       var midi = startMidi + oct*12 + pc;
-      var x = (oct*7 + wi) * wkW;
+      var x = offsetX + (oct*7 + wi) * wkW;
       var rect = document.createElementNS(NS, 'rect');
       rect.setAttribute('x', x + 0.5);
       rect.setAttribute('y', 0.5);
@@ -2203,7 +2297,7 @@ function renderPianoKeyboard(){
       var bd = blackDefs[bi];
       var midi = startMidi + oct*12 + bd.pc;
       // Center X in SVG units
-      var cx_px = (oct*7 + bd.pos) * wkW;
+      var cx_px = offsetX + (oct*7 + bd.pos) * wkW;
       var x = cx_px - bkW/2;
       var rect = document.createElementNS(NS, 'rect');
       rect.setAttribute('x', x);
@@ -2408,16 +2502,6 @@ function pianoPossibleChords(pcs){
     return '<span class="piano-possible-tag">' + c.nm + '</span>';
   }).join('');
 }
-
-// ===================== PIANO KEYBOARD SHORTCUTS =====================
-// Escape: clear all piano notes
-document.addEventListener('keydown', function(e){
-  if(currentMode !== 'piano') return;
-  if(e.key === 'Escape'){
-    e.preventDefault();
-    pianoClearAll();
-  }
-});
 
 // ===================== MIDI =====================
 // ピッチベンド単発発火フラグ
