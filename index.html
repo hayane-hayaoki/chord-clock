@@ -68,7 +68,7 @@ html,body{
 #pizza{width:100%;height:auto;display:block}
 #results-area{
   width:100%;padding:4px 10px;
-  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:6px;
+  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:6px;
 }
 #results-area-next{
   width:100%;padding:4px 6px 2px;
@@ -145,9 +145,11 @@ body.next-mode #results-area{
 }
 /* Next mode: prog-log-wrap（左列内）は非表示。下部の専用ログを使う */
 body.next-mode #prog-log-wrap{display:none!important;}
-/* 右カラム: ジャンル選択 + コード候補（左揃え） */
+/* 右カラム: 固定幅にして justify-content:center が効くようにする */
 body.next-mode #next-chord-panel{
-  flex:1 1 0;min-width:180px;
+  flex:0 0 auto;
+  width:min(44vw,380px);
+  min-width:180px;
   height:calc(min(52vw,50vh) + 60px);overflow-y:auto;
   padding:6px 8px 10px;
 }
@@ -222,7 +224,7 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .nc-tag.g3{color:#e0a060;background:rgba(224,160,96,.07);border-color:rgba(224,160,96,.22);}
 .nc-tag.g3:hover{background:rgba(224,160,96,.16);border-color:rgba(224,160,96,.5);}
 .nc-tag.nc-playing{box-shadow:0 0 0 2px currentColor;}
-#next-chord-empty{text-align:center;color:#555;font-size:12px;padding:18px 0;}
+#next-chord-empty{text-align:left;color:#555;font-size:12px;padding:18px 0;}
 .mode-btn.next-active{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-radius:18px;}
 .mode-btn.piano-active{background:linear-gradient(135deg,#9aa8b8,#6a7a8a);color:#fff;border-radius:18px;box-shadow:0 0 0 1px rgba(200,210,220,.3);}
 /* MOOD SELECTOR */
@@ -1867,12 +1869,18 @@ function setMode(mode){
   selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
   playActive.forEach(function(_,n){stopNote(n,true);});
   playActive.clear();
+  // Piano mode selections も解除
+  if(typeof pianoSelected!=='undefined'){pianoSelected.clear();}
+  if(typeof pianoHeldNotes!=='undefined'){pianoHeldNotes.clear();}
   ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
   _prevRootMidi=null;
   progLog=[];renderProgLog();
   resetMixGain();
   updateAll();
+  // Piano UI を更新
+  if(typeof renderPianoKeys==='function') renderPianoKeys();
+  if(typeof updatePianoResult==='function') updatePianoResult();
 }
 
 function playModePress(n){
@@ -2409,6 +2417,9 @@ document.addEventListener('keydown', function(e){
 });
 
 // ===================== MIDI =====================
+// ピッチベンド単発発火フラグ
+var _bendUpFired=false;
+var _bendDownFired=false;
 function initMIDI(){
   if(!navigator.requestMIDIAccess)return;
   navigator.requestMIDIAccess().then(midi=>{
@@ -2419,16 +2430,36 @@ function initMIDI(){
       const pc=note%12;
 
       // Pitch Bend (0xE0): 14-bit value, LSB=note, MSB=vel
-      // Center = 8192 (0x2000). >8192 = bend up → Replay. <8192 = bend down → Clear.
+      // Center = 8192. >8192 = bend up → Replay (単発). <8192 = bend down → Clear.
       if(cmd===0xe0){
-        if(currentMode==='piano'){
-          const bendVal=(vel<<7)|note; // 14-bit: MSB<<7 | LSB
-          if(bendVal>8192){
-            pianoReplay();
-          } else if(bendVal<8192){
-            pianoClearAll();
+        const bendVal=(vel<<7)|note;
+        if(bendVal>8500){
+          // 上ゾーン: まだ発火していなければ再生
+          if(!_bendUpFired){
+            _bendUpFired=true;
+            _bendDownFired=false;
+            if(currentMode==='piano'){
+              pianoReplay();
+            } else {
+              // Analyze / Next モード: 選択中の音を再生
+              if(selected.size>0) playSelected();
+            }
           }
-          // bendVal===8192 is center/no-bend, ignore
+        } else if(bendVal<7700){
+          // 下ゾーン: まだ発火していなければクリア
+          if(!_bendDownFired){
+            _bendDownFired=true;
+            _bendUpFired=false;
+            if(currentMode==='piano'){
+              pianoClearAll();
+            } else {
+              resetAll();
+            }
+          }
+        } else {
+          // センター付近に戻ったらフラグリセット
+          _bendUpFired=false;
+          _bendDownFired=false;
         }
         return;
       }
