@@ -528,11 +528,11 @@ body.piano-mode #extend-area { display: none !important; }
     </div>
   </div>
   <div id="results-area"></div>
-  <div id="suggestions"><div id="sug-label"></div><div id="sug-list"></div></div>
   <div id="extend-area" style="width:100%;padding:2px 10px 6px;text-align:center;display:none">
     <div id="ext-label" style="font-size:10px;color:#666;margin-bottom:4px"></div>
     <div id="ext-list" style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center"></div>
   </div>
+  <div id="suggestions"><div id="sug-label"></div><div id="sug-list"></div></div>
 </div>
 <script>
 // ===================== PWA INLINE =====================
@@ -620,11 +620,14 @@ function useFlat(root,s){
   // 1. Explicit accidental in suffix is absolute
   if(s.includes('♯'))return false;
   if(s.includes('♭'))return true;
-  // 2. Key signature overrides everything else
-  if(currentKey.acc!==null)return currentKey.flat;
-  // 3. No key set: m7-family prefers flat spelling
+  // 2. フラットキーなら常にフラット表記
+  if(currentKey.acc!==null && currentKey.flat)return true;
+  // 3. 7系コード(m7ファミリー)は調号に関わらずフラット表記を優先
+  //    例: Cメジャーキーでも C7 の B♭ は B♭ と表示(A♯ではなく)
   if(FLAT_SEVEN_SUFFIXES.has(s))return true;
-  // 4. Root character decides
+  // 4. シャープキー設定時はシャープ表記
+  if(currentKey.acc!==null)return false;
+  // 5. No key set: root character decides
   return!SHARP_ROOTS.has(root);
 }
 function noteName(n,flat){
