@@ -240,9 +240,9 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .mood-btn:hover{color:#aaa;border-color:#555;}
 .mood-btn.mood-active{color:#fff;}
 .mood-btn[data-mood="universal"].mood-active{background:#4a5568;border-color:#718096;}
-.mood-btn[data-mood="pop"].mood-active{background:#2a6ac4;border-color:#4a90d9;}
+.mood-btn[data-mood="pop"].mood-active{background:#c04040;border-color:#e07070;}
 .mood-btn[data-mood="minor"].mood-active{background:#553a7a;border-color:#8b6abf;}
-.mood-btn[data-mood="rock"].mood-active{background:#8b3a2a;border-color:#c0614a;}
+.mood-btn[data-mood="rock"].mood-active{background:#1a1a1a;border-color:#888;}
 .mood-btn[data-mood="cinematic"].mood-active{background:#2a6a5a;border-color:#4ab09a;}
 /* PROGRESSION LOG */
 #prog-log-wrap{width:100%;padding:4px 10px 2px;display:none;}
@@ -2025,6 +2025,14 @@ document.addEventListener('keydown',function(e){
   }
 
   // --- Analyze / Next / Play mode keyboard shortcuts ---
+  // Right Shift (Next mode only): cycle mood
+  if(e.code==='ShiftRight' && currentMode==='next'){
+    e.preventDefault();
+    var moods=['universal','pop','minor','rock','cinematic'];
+    var moodIdx=moods.indexOf(currentMood);
+    setMood(moods[(moodIdx+1)%moods.length]);
+    return;
+  }
   if(e.key==='Escape'||e.code==='Backspace'){e.preventDefault();resetAll();return;}
   if(e.code==='Space'||e.key==='F3'||e.key==='F7'||e.key==='F8'||e.code==='Digit9'){
     e.preventDefault();
