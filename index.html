@@ -738,17 +738,16 @@ function getAC(){
   if(actx.state==='suspended')actx.resume().catch(()=>{});
   return actx;
 }
-function voiceLevel(nVoices){return Math.min(0.28,0.28/Math.sqrt(Math.max(1,nVoices)));}
+function voiceLevel(nVoices){return Math.min(0.50,0.50/Math.sqrt(Math.max(1,nVoices)));}
 
 // 等ラウドネス補正: 高音ほど耳に大きく聞こえるのを補正する
-// MIDI 60(C4)=基準, それより高いほどゲインを下げる
-// 参考: 人間の聴覚は約1kHz基準で4kHz帯は約10dB感度が高い
-// ここでは 12半音(1オクターブ)上がるごとに約-2.5dB(-0.75倍) の補正をかける
+// MIDI 60(C4)=基準・上限, それより高いほどゲインを下げる
+// C4より低い音はC4と同じ音量に固定（爆音防止）
+// 1オクターブ上がるごとに約-6dB(×0.50)の補正をかける
 function loudnessComp(midiNote){
-  const ref=62; // D4付近を基準(コード中間音として自然な位置)
-  const semisAboveRef=midiNote-ref;
-  // 1オクターブ(12半音)上で -3dB (×0.707), 下で +1.5dB (×1.19) 程度
-  return Math.pow(0.944, semisAboveRef); // 0.944^12 ≒ 0.50 (-6dB/oct, 少し強め)
+  const ref=60; // C4を基準・上限
+  const semisAboveRef=Math.max(0, midiNote-ref); // C4より低い音はクランプ
+  return Math.pow(0.944, semisAboveRef); // 0.944^12 ≒ 0.50 (-6dB/oct)
 }
 
 // ---- クリックノイズ対策の設計方針 ----
@@ -864,8 +863,8 @@ function _playOsc(semitone,nVoices,holdMode){
   // attack
   g.setValueAtTime(0.0001,t);
   g.exponentialRampToValueAtTime(level,t+0.012);
-  if(holdMode){
-    // Play モード: 押している間ゆっくり減衰、離したら releaseVoice() で止める
+  if(holdMode||_sustainOn){
+    // Play モード or サスティンペダル中: ゆっくり減衰、離したら releaseVoice() / _sustainRelease() で止める
     g.setValueAtTime(level,t+0.012);
     g.linearRampToValueAtTime(level*0.85,t+0.4);
     g.linearRampToValueAtTime(level*0.65,t+1.5);
@@ -2093,7 +2092,7 @@ var _keydownHandler = function(e){
     if(kbPc !== undefined){
       e.preventDefault();
       if(e.repeat) return;
-      var startMidi = getPianoStartMidi(); // 60 for 2-oct, 48 for 3-oct
+      var startMidi = 60; // キーボード基点は常にC4固定（表示オクターブに関わらず）
       var kbMidi;
       if(e.code === 'Backquote'){
         // ` = B just below the start octave (B3=59 when startMidi=60)
@@ -2619,6 +2618,20 @@ function pianoPossibleChords(pcs){
 }
 
 // ===================== MIDI =====================
+// ---- サスティンペダル ----
+var _sustainOn=false;
+function _sustainRelease(){
+  if(!actx)return;
+  const t=actx.currentTime+AHEAD;
+  activeNodes.forEach(function(node,n){
+    const g=node.vGain.gain;
+    if(g.cancelAndHoldAtTime){g.cancelAndHoldAtTime(t);}
+    else{g.cancelScheduledValues(t);g.setValueAtTime(Math.max(g.value,0.0001),t);}
+    g.exponentialRampToValueAtTime(0.0001,t+0.15);
+    try{node.osc.stop(t+0.16);}catch(e){}
+  });
+  activeNodes.clear();
+}
 // ピッチベンド単発発火フラグ
 var _bendUpFired=false;
 var _bendDownFired=false;
@@ -2662,6 +2675,33 @@ function initMIDI(){
           // センター付近に戻ったらフラグリセット
           _bendUpFired=false;
           _bendDownFired=false;
+        }
+        return;
+      }
+
+      // Control Change (0xB0): ペダル処理
+      if(cmd===0xb0){
+        const cc=note;
+        const val=vel;
+        if(cc===64){
+          // 右ペダル: サスティン (CC#64) — 全モード共通
+          const on=val>=64;
+          if(on!==_sustainOn){
+            _sustainOn=on;
+            if(!on) _sustainRelease(); // 離したら減衰開始
+          }
+        } else if(cc===66){
+          // 中央ペダル: ソステヌート → 再生 (CC#66)
+          if(val>=64){
+            if(currentMode==='piano'){ pianoReplay(); }
+            else { if(selected.size>0) playSelected(); }
+          }
+        } else if(cc===67){
+          // 左ペダル: ソフト → クリア (CC#67)
+          if(val>=64){
+            if(currentMode==='piano'){ pianoClearAll(); }
+            else { resetAll(); }
+          }
         }
         return;
       }
