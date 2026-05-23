@@ -457,7 +457,15 @@ body.piano-mode #extend-area { display: none !important; }
   color: #fff;
   border-radius: 14px;
 }
-</style>
+
+<style>
+#dbg-panel{
+  position:fixed;bottom:0;right:0;width:280px;max-height:200px;
+  overflow-y:auto;background:rgba(0,0,0,.85);color:#0f0;
+  font-size:10px;font-family:monospace;padding:4px;z-index:9999;
+  pointer-events:none;
+}
+</style></style>
 </head>
 <body>
 <div id="app">
@@ -546,6 +554,19 @@ body.piano-mode #extend-area { display: none !important; }
   <div id="suggestions"><div id="sug-label"></div><div id="sug-list"></div></div>
 </div>
 <script>
+
+// ===== DEBUG PANEL =====
+var _dbgEl=document.createElement('div');
+_dbgEl.id='dbg-panel';
+document.body.appendChild(_dbgEl);
+function _dbg(msg){
+  var d=new Date();
+  var ts=d.getSeconds()+'.'+('00'+d.getMilliseconds()).slice(-3);
+  _dbgEl.innerHTML='<div>['+ts+'] '+msg+'</div>'+_dbgEl.innerHTML;
+  if(_dbgEl.children.length>20)_dbgEl.removeChild(_dbgEl.lastChild);
+}
+window._dbg=_dbg;
+
 // ===================== PWA INLINE =====================
 // PWA setup — fully wrapped in try/catch so ANY error here
 // cannot block the main app from rendering on Android Chrome
@@ -575,7 +596,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v6';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v7';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -2790,46 +2811,47 @@ function initMIDI(){
   }).catch(()=>{});
 }
 // ===================== TOUCH EVENT DELEGATION (iOS PWA対応) =====================
-// document レベルで受けることで scrollable container 内でも確実に動作する
 (function(){
-  var _tx=0,_ty=0,_fired=false,_downEl=null;
+  var _tx=0,_ty=0,_downEl=null;
 
-  // タッチ開始: 座標と対象要素を記録
   document.addEventListener('touchstart',function(e){
     var t=e.touches[0];
-    _tx=t.clientX;_ty=t.clientY;_fired=false;
-    _downEl=e.target;
+    _tx=t.clientX;_ty=t.clientY;
+    _downEl=document.elementFromPoint(t.clientX,t.clientY)||e.target;
+    window._dbg&&_dbg('touchstart: '+((_downEl)?_downEl.tagName+' '+_downEl.className.substring(0,20):'?'));
   },{passive:true});
 
-  // タッチ終了: 移動量10px以内ならタップとして処理
   document.addEventListener('touchend',function(e){
-    if(_fired)return;
     var t=e.changedTouches[0];
     var dx=t.clientX-_tx,dy=t.clientY-_ty;
-    if(dx*dx+dy*dy>100)return; // スクロール判定: 無視
+    window._dbg&&_dbg('touchend dx='+Math.round(dx)+' dy='+Math.round(dy));
+    if(dx*dx+dy*dy>100){window._dbg&&_dbg('skip: moved');return;}
     var el=_downEl||e.target;
-    if(_tryNcTag(el)||_tryLogItem(el))e.preventDefault();
-  },{passive:false}); // preventDefault のために passive:false
+    window._dbg&&_dbg('el: '+(el?el.tagName+' cls='+el.className.substring(0,30):'null'));
+    if(_tryNcTag(el)){e.preventDefault();return;}
+    if(_tryLogItem(el)){e.preventDefault();return;}
+    window._dbg&&_dbg('no match');
+  },{passive:false});
 
-  // マウス/PC用: click (touch処理済みなら無視)
-  document.addEventListener('click',function(e){
-    if(_fired){_fired=false;return;}
-    _tryNcTag(e.target)||_tryLogItem(e.target);
-  },true); // capture:true で確実に取得
-
-  // --- nc-tag 処理 ---
-  function _tryNcTag(el){
-    var tag=el;
-    while(tag&&tag.id!=='next-chord-content'){
-      if(tag.classList&&tag.classList.contains('nc-tag'))break;
-      tag=tag.parentElement;
-      if(!tag)return false;
+  // --- nc-tag: 自身または祖先を探す ---
+  function _findAncestor(el,cls,stopId){
+    var node=el;
+    while(node){
+      if(node.id===stopId)return null;
+      if(node.classList&&node.classList.contains(cls))return node;
+      node=node.parentElement;
     }
-    if(!tag||!tag.classList||!tag.classList.contains('nc-tag'))return false;
+    return null;
+  }
+
+  function _tryNcTag(el){
+    window._dbg&&_dbg('tryNcTag: '+(el?el.tagName+'.'+el.className:'null'));
+    var tag=_findAncestor(el,'nc-tag','app');
+    window._dbg&&_dbg('found nc-tag: '+(tag?'YES rp='+tag.dataset.rp:'NO'));
+    if(!tag)return false;
     var rp=parseInt(tag.dataset.rp,10);
     var cs=tag.dataset.cs;
     if(isNaN(rp)||cs===undefined)return false;
-    _fired=true;
     ncPlayingKey=rp+'_'+cs;
     var ch=CHORDS.find(function(c){return c.s===cs;});
     selected.clear();sugHL.clear();extHL.clear();
@@ -2840,31 +2862,15 @@ function initMIDI(){
     return true;
   }
 
-  // --- pl-chord / pl-clear 処理 ---
   function _tryLogItem(el){
-    // pl-clear (×ボタン)
-    var clr=el;
-    while(clr&&clr.id!=='prog-log-inner-bottom'){
-      if(clr.classList&&clr.classList.contains('pl-clear'))break;
-      clr=clr.parentElement;
-      if(!clr)break;
-    }
-    if(clr&&clr.classList&&clr.classList.contains('pl-clear')){
-      _fired=true;
-      progLog=[];renderProgLog();
-      return true;
-    }
-    // pl-chord (履歴コード)
-    var span=el;
-    while(span&&span.id!=='prog-log-inner-bottom'){
-      if(span.classList&&span.classList.contains('pl-chord'))break;
-      span=span.parentElement;
-      if(!span)break;
-    }
-    if(!span||!span.classList||!span.classList.contains('pl-chord'))return false;
+    // pl-clear
+    var clr=_findAncestor(el,'pl-clear','app');
+    if(clr){progLog=[];renderProgLog();return true;}
+    // pl-chord
+    var span=_findAncestor(el,'pl-chord','app');
+    if(!span)return false;
     var idx=parseInt(span.dataset.logIdx,10);
     if(isNaN(idx)||!progLog[idx])return false;
-    _fired=true;
     var it=progLog[idx];
     var ch=CHORDS.find(function(c){return c.s===it.suf;});
     ncPlayingKey=null;
