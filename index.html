@@ -60,11 +60,14 @@ html,body{
 #svg-wrap{
   width:100%;
   padding:0 4px;
-  /* 縦持ち: vmin基準でiPad画面の短辺いっぱい、横持ち: vwで広く */
-  max-width:min(96vw, 86vmin);
+  max-width:min(98vw, 62vh);
 }
 @media(max-width:600px){
   #svg-wrap{max-width:98vw;}
+}
+/* iPad向け: 画面が768px以上の場合のみピザを大きく */
+@media(min-width:768px) and (pointer:coarse){
+  #svg-wrap{max-width:min(96vw, 82vmin);}
 }
 #pizza{width:100%;height:auto;display:block}
 #results-area{
@@ -569,7 +572,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v3';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v4';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -794,8 +797,12 @@ function stopNote(n,imm){
   activeNodes.delete(n);
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
-  if(g.cancelAndHoldAtTime){ g.cancelAndHoldAtTime(t); }
-  else {
+  if(g.cancelAndHoldAtTime){
+    try{ g.cancelAndHoldAtTime(t); }catch(e){
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.max(g.value,0.0001),t);
+    }
+  } else {
     g.cancelScheduledValues(t);
     g.setValueAtTime(Math.max(g.value,0.0001),t);
   }
@@ -907,15 +914,19 @@ function releaseVoice(n){
   activeNodes.delete(n);
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
-  // cancelAndHoldAtTime と cancelScheduledValues の両方を試みる（Safari互換性）
-  try{ if(g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t); } catch(e){}
-  try{
+  // cancelAndHoldAtTime が使えるブラウザではそれだけ使う（Chrome/Safari）
+  // 両方呼ぶと gain.value が不定値になりプツ音が出るので排他的に使用
+  if(g.cancelAndHoldAtTime){
+    try{ g.cancelAndHoldAtTime(t); }catch(e){
+      // フォールバック: cancelScheduledValues + 現在値スナップショット
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.max(g.value,0.0001),t);
+    }
+  } else {
     g.cancelScheduledValues(t);
-    // 現在値をスナップショット（0以下にならないよう0.0001でクランプ）
-    const cur=Math.max(g.value, 0.0001);
-    g.setValueAtTime(cur, t);
-  }catch(e){}
-  g.exponentialRampToValueAtTime(0.0001, t+0.12);
+    g.setValueAtTime(Math.max(g.value,0.0001),t);
+  }
+  g.exponentialRampToValueAtTime(0.0001,t+0.12);
   try{osc.stop(t+0.13);}catch(e){}
 }
 // ---- Voice leading ----
