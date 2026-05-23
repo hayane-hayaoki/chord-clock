@@ -227,11 +227,11 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .nc-tag-name{font-size:11px;font-weight:700;line-height:1.1;}
 .nc-tag-desc{font-size:9px;font-weight:400;opacity:.65;line-height:1.1;}
 .nc-tag.g1{color:#7ec8f0;background:rgba(126,200,240,.07);border-color:rgba(126,200,240,.25);}
-.nc-tag.g1:hover{background:rgba(126,200,240,.16);border-color:rgba(126,200,240,.5);}
+@media(hover:hover){.nc-tag.g1:hover{background:rgba(126,200,240,.16);border-color:rgba(126,200,240,.5);}}
 .nc-tag.g2{color:#a0d8a0;background:rgba(160,216,160,.07);border-color:rgba(160,216,160,.22);}
-.nc-tag.g2:hover{background:rgba(160,216,160,.16);border-color:rgba(160,216,160,.5);}
+@media(hover:hover){.nc-tag.g2:hover{background:rgba(160,216,160,.16);border-color:rgba(160,216,160,.5);}}
 .nc-tag.g3{color:#e0a060;background:rgba(224,160,96,.07);border-color:rgba(224,160,96,.22);}
-.nc-tag.g3:hover{background:rgba(224,160,96,.16);border-color:rgba(224,160,96,.5);}
+@media(hover:hover){.nc-tag.g3:hover{background:rgba(224,160,96,.16);border-color:rgba(224,160,96,.5);}}
 .nc-tag.nc-playing{box-shadow:0 0 0 2px currentColor;}
 #next-chord-empty{text-align:left;color:#555;font-size:12px;padding:18px 0;}
 .mode-btn.next-active{background:#4A90D9;color:#fff;border-radius:18px;}
@@ -246,7 +246,7 @@ body.piano-mode .rb-inversion{display:inline-block;}
   cursor:pointer;border:1px solid #333;transition:all .15s;user-select:none;
   background:#242428;color:#666;white-space:nowrap;
 }
-.mood-btn:hover{color:#aaa;border-color:#555;}
+@media(hover:hover){.mood-btn:hover{color:#aaa;border-color:#555;}}
 .mood-btn.mood-active{color:#fff;}
 .mood-btn[data-mood="universal"].mood-active{background:#a07800;border-color:#f0c000;}
 .mood-btn[data-mood="pop"].mood-active{background:#c04040;border-color:#e07070;}
@@ -267,7 +267,7 @@ body.next-mode #prog-log-wrap{display:block;}
   transition:color .12s,border-color .12s;user-select:none;flex-shrink:0;
   touch-action:manipulation;
 }
-.pl-chord:hover{color:#bbb;border-color:#555;}
+@media(hover:hover){.pl-chord:hover{color:#bbb;border-color:#555;}}
 .pl-chord.pl-current{color:#e8e4dc;border-color:#4a7aae;background:#252830;}
 .pl-chord.pl-active{color:#fff;border-color:#7c5cbf;background:#2a2240;}
 .pl-arrow{font-size:8px;color:#3a3a3e;padding:0 1px;flex-shrink:0;}
@@ -276,7 +276,7 @@ body.next-mode #prog-log-wrap{display:block;}
   border:1px solid transparent;flex-shrink:0;margin-left:4px;white-space:nowrap;
   transition:color .12s,border-color .12s;touch-action:manipulation;
 }
-.pl-clear:hover{color:#888;border-color:#555;}
+@media(hover:hover){.pl-clear:hover{color:#888;border-color:#555;}}
 
 /* VOLUME SLIDER */
 #vol-control{
@@ -419,12 +419,20 @@ body.piano-mode #extend-area { display: none !important; }
   transition: background .15s, color .15s;
   user-select: none;
 }
-.piano-action-btn:hover, .piano-action-btn:active {
+/* :active のみ (全デバイス共通) */
+.piano-action-btn:active {
   background: #333;
   color: #aaa;
 }
+/* :hover はマウスデバイスのみ (iOSでhoverが残る問題を防ぐ) */
+@media (hover: hover) {
+  .piano-action-btn:hover { background: #333; color: #aaa; }
+}
 #piano-replay-btn { border-color: #3a3a3e; color: #555; }
-#piano-replay-btn:hover, #piano-replay-btn:active { background: #333; color: #aaa; }
+#piano-replay-btn:active { background: #333; color: #aaa; }
+@media (hover: hover) {
+  #piano-replay-btn:hover { background: #333; color: #aaa; }
+}
 
 /* Piano switches */
 .piano-sw-group {
@@ -577,7 +585,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v10';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v12';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
