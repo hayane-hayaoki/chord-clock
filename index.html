@@ -768,9 +768,6 @@ function loudnessComp(midiNote){
 //             holdMode=true  → 0.4s で 0.85 倍、1.5s で 0.65 倍まで自然減衰
 //   release : playModeRelease 時に 150ms で 0 へ exponential
 
-// holdMode フラグ: _playOsc に渡す
-let _holdMode=false;
-
 // ---- レイテンシー管理 ----
 // AHEAD: JS→AudioWorklet スレッドずれ + スケジュール処理余裕
 // getAC() 後に baseLatency から動的に決定する（デバイス最適化）
@@ -1021,7 +1018,8 @@ function renderProgLog(){
         target.appendChild(br);
       }
       // 矢印: 行頭（i===0 or i===ROW_SIZE）以外に付ける
-      if(i>0&&i!==ROW_SIZE){
+      // i===ROW_SIZEは改行直後の行頭なので矢印不要
+      if(i>0&&i!==ROW_SIZE&&i!==ROW_SIZE+1){
         var arr=document.createElement('span');arr.className='pl-arrow';arr.textContent='>';target.appendChild(arr);
       }
       var span=document.createElement('span');
@@ -1476,17 +1474,8 @@ function updateNextChordPanel(){
     if(ncPlayingKey===k)tag.classList.add('nc-playing');
     tag.innerHTML='<span class="nc-tag-name">'+label+'</span><span class="nc-tag-desc">'+cand.desc+'</span>';
     (function(rp,cs){
-      // pointerdown で即処理: iOSでclickが遅延・キャンセルされてもハイライトが残らない
-      var _pdX=0,_pdY=0,_moved=false;
-      tag.addEventListener('pointerdown',function(e){
-        _pdX=e.clientX;_pdY=e.clientY;_moved=false;
-      },{passive:true});
-      tag.addEventListener('pointermove',function(e){
-        if(Math.abs(e.clientX-_pdX)>8||Math.abs(e.clientY-_pdY)>8)_moved=true;
-      },{passive:true});
-      tag.addEventListener('pointerup',function(e){
-        if(_moved)return; // スクロール中はキャンセル
-        e.preventDefault();
+      var _pdX=0,_pdY=0,_didFire=false;
+      function _activate(){
         ncPlayingKey=rp+'_'+cs;
         var ch=CHORDS.find(function(c){return c.s===cs;});
         selected.clear();sugHL.clear();extHL.clear();
@@ -1494,11 +1483,23 @@ function updateNextChordPanel(){
         else{selected.add(rp);}
         playChordDef(rp,cs);
         renderSlices();renderCenter();updateResults();updateNextChordPanel();
+      }
+      tag.addEventListener('pointerdown',function(e){
+        _pdX=e.clientX;_pdY=e.clientY;_didFire=false;
+      },{passive:true});
+      tag.addEventListener('pointerup',function(e){
+        // 移動量が10px以内ならタップと判定（スクロール中は無視）
+        var dx=e.clientX-_pdX, dy=e.clientY-_pdY;
+        if(dx*dx+dy*dy>100)return;
+        e.preventDefault();
+        _didFire=true;
+        _activate();
       });
-      // clickも残す（マウス操作との互換性）ただし二重発火防止
-      var _handled=false;
-      tag.addEventListener('pointerup',function(){_handled=true;setTimeout(function(){_handled=false;},300);},{passive:true,capture:true});
-      tag.addEventListener('click',function(e){if(_handled)e.stopImmediatePropagation();});
+      // マウス用: pointerupで処理済みなら click は無視
+      tag.addEventListener('click',function(e){
+        if(_didFire){_didFire=false;return;}
+        _activate();
+      });
     })(rootPc,cand.suf);
     return tag;
   }
@@ -1608,7 +1609,7 @@ function renderSlices(){
     g.addEventListener('pointerdown',e=>{
       if(currentMode!=='play')return;
       e.preventDefault();
-      g.setPointerCapture(e.pointerId);
+      // setPointerCapture を使わない: スライドで他スライスに入れるよう
       playModePress(i);
     });
     g.addEventListener('pointerup',e=>{
@@ -2003,7 +2004,7 @@ function toggleNote(i){
   updateAll();
 }
 function resetAll(){
-  stopAll(true);selected.clear();sugHL.clear();extHL.clear();
+  stopAll(true);selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
   playActive.clear();ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
   _prevRootMidi=null;
@@ -2289,6 +2290,8 @@ function pianoClearAll(){
 function pianoReplay(){
   if(pianoSelected.size === 0) return;
   stopAll(true);
+  // Play中のheldNotesもクリア（stopAll後にactiveNodesが空になるため整合性確保）
+  pianoHeldNotes.clear();
   var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
   var nv = midiArr.length;
   midiArr.forEach(function(m){ _playOsc(m, nv, false); });
