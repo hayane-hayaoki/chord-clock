@@ -575,7 +575,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v5';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v6';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -1038,66 +1038,6 @@ function renderProgLog(){
     target.appendChild(clr);
   }
   buildItems(innerB);
-
-  // Event Delegation: innerBに一度だけ設定
-  if(!innerB._delegated){
-    innerB._delegated=true;
-    var _ltx=0,_lty=0,_lFired=false,_lTarget=null;
-
-    function _logActivate(el){
-      // pl-clear
-      if(el.dataset&&el.dataset.logClear){
-        progLog=[];renderProgLog();return;
-      }
-      // pl-chord: data-log-idxで該当コードを特定
-      var span=el;
-      while(span&&span!==innerB){
-        if(span.dataset&&span.dataset.logIdx!==undefined)break;
-        span=span.parentElement;
-      }
-      if(!span||span===innerB)return;
-      var idx=parseInt(span.dataset.logIdx,10);
-      if(isNaN(idx)||!progLog[idx])return;
-      var it=progLog[idx];
-      var ch=CHORDS.find(function(c){return c.s===it.suf;});
-      ncPlayingKey=null;
-      selected.clear();sugHL.clear();extHL.clear();
-      if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
-      else{selected.add(it.root);}
-      renderSlices();renderCenter();updateResults();
-      if(currentMode==='next')updateNextChordPanel();
-      var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
-      var sems=voiceLeadSemitones(pcs,lastChordSemitones);
-      stopAll(true);
-      sems.forEach(function(s){_playOsc(s,sems.length,false);});
-      lastChordSemitones=[].concat(sems);
-      lastInversion=detectInversion(sems,it.root);
-      progLog.forEach(function(p){p._active=false;});
-      it._active=true;
-      renderProgLog();
-    }
-
-    innerB.addEventListener('touchstart',function(e){
-      var t=e.touches[0];
-      _ltx=t.clientX;_lty=t.clientY;_lFired=false;
-      _lTarget=e.target;
-    },{passive:true});
-
-    innerB.addEventListener('touchend',function(e){
-      if(_lFired)return;
-      var t=e.changedTouches[0];
-      var dx=t.clientX-_ltx,dy=t.clientY-_lty;
-      if(dx*dx+dy*dy>100)return;
-      e.preventDefault();
-      _lFired=true;
-      _logActivate(_lTarget||e.target);
-    });
-
-    innerB.addEventListener('click',function(e){
-      if(_lFired){_lFired=false;return;}
-      _logActivate(e.target);
-    });
-  }
 }
 // ---- Public play functions ----
 // rootPosition: rootPcを最低音に固定した配置を返す（Analyze/Playモード用）
@@ -1566,54 +1506,6 @@ function updateNextChordPanel(){
     div.appendChild(tags);wrap.appendChild(div);
   });
   content.innerHTML='';content.appendChild(wrap);
-
-  // Event Delegation: #next-chord-content に一度だけ設定
-  // (dynamic生成タグへの直接リスナーがiOS PWAで届かない問題を回避)
-  if(!content._delegated){
-    content._delegated=true;
-    var _dtx=0,_dty=0,_dFired=false,_dTarget=null;
-
-    function _ncActivate(el){
-      // nc-tag自身またはその子(nc-tag-name/desc)から親nc-tagを探す
-      var tag=el;
-      while(tag&&tag!==content){
-        if(tag.classList&&tag.classList.contains('nc-tag'))break;
-        tag=tag.parentElement;
-      }
-      if(!tag||tag===content)return;
-      var rp=parseInt(tag.dataset.rp,10);
-      var cs=tag.dataset.cs;
-      if(isNaN(rp)||cs===undefined)return;
-      ncPlayingKey=rp+'_'+cs;
-      var ch=CHORDS.find(function(c){return c.s===cs;});
-      selected.clear();sugHL.clear();extHL.clear();
-      if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
-      else{selected.add(rp);}
-      playChordDef(rp,cs);
-      renderSlices();renderCenter();updateResults();updateNextChordPanel();
-    }
-
-    content.addEventListener('touchstart',function(e){
-      var t=e.touches[0];
-      _dtx=t.clientX;_dty=t.clientY;_dFired=false;
-      _dTarget=e.target;
-    },{passive:true});
-
-    content.addEventListener('touchend',function(e){
-      if(_dFired)return;
-      var t=e.changedTouches[0];
-      var dx=t.clientX-_dtx,dy=t.clientY-_dty;
-      if(dx*dx+dy*dy>100)return;
-      e.preventDefault();
-      _dFired=true;
-      _ncActivate(_dTarget||e.target);
-    });
-
-    content.addEventListener('click',function(e){
-      if(_dFired){_dFired=false;return;}
-      _ncActivate(e.target);
-    });
-  }
 }
 
 // ===================== SVG =====================
@@ -2897,6 +2789,103 @@ function initMIDI(){
     connect(midi);midi.onstatechange=()=>connect(midi);
   }).catch(()=>{});
 }
+// ===================== TOUCH EVENT DELEGATION (iOS PWA対応) =====================
+// document レベルで受けることで scrollable container 内でも確実に動作する
+(function(){
+  var _tx=0,_ty=0,_fired=false,_downEl=null;
+
+  // タッチ開始: 座標と対象要素を記録
+  document.addEventListener('touchstart',function(e){
+    var t=e.touches[0];
+    _tx=t.clientX;_ty=t.clientY;_fired=false;
+    _downEl=e.target;
+  },{passive:true});
+
+  // タッチ終了: 移動量10px以内ならタップとして処理
+  document.addEventListener('touchend',function(e){
+    if(_fired)return;
+    var t=e.changedTouches[0];
+    var dx=t.clientX-_tx,dy=t.clientY-_ty;
+    if(dx*dx+dy*dy>100)return; // スクロール判定: 無視
+    var el=_downEl||e.target;
+    if(_tryNcTag(el)||_tryLogItem(el))e.preventDefault();
+  },{passive:false}); // preventDefault のために passive:false
+
+  // マウス/PC用: click (touch処理済みなら無視)
+  document.addEventListener('click',function(e){
+    if(_fired){_fired=false;return;}
+    _tryNcTag(e.target)||_tryLogItem(e.target);
+  },true); // capture:true で確実に取得
+
+  // --- nc-tag 処理 ---
+  function _tryNcTag(el){
+    var tag=el;
+    while(tag&&tag.id!=='next-chord-content'){
+      if(tag.classList&&tag.classList.contains('nc-tag'))break;
+      tag=tag.parentElement;
+      if(!tag)return false;
+    }
+    if(!tag||!tag.classList||!tag.classList.contains('nc-tag'))return false;
+    var rp=parseInt(tag.dataset.rp,10);
+    var cs=tag.dataset.cs;
+    if(isNaN(rp)||cs===undefined)return false;
+    _fired=true;
+    ncPlayingKey=rp+'_'+cs;
+    var ch=CHORDS.find(function(c){return c.s===cs;});
+    selected.clear();sugHL.clear();extHL.clear();
+    if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
+    else{selected.add(rp);}
+    playChordDef(rp,cs);
+    renderSlices();renderCenter();updateResults();updateNextChordPanel();
+    return true;
+  }
+
+  // --- pl-chord / pl-clear 処理 ---
+  function _tryLogItem(el){
+    // pl-clear (×ボタン)
+    var clr=el;
+    while(clr&&clr.id!=='prog-log-inner-bottom'){
+      if(clr.classList&&clr.classList.contains('pl-clear'))break;
+      clr=clr.parentElement;
+      if(!clr)break;
+    }
+    if(clr&&clr.classList&&clr.classList.contains('pl-clear')){
+      _fired=true;
+      progLog=[];renderProgLog();
+      return true;
+    }
+    // pl-chord (履歴コード)
+    var span=el;
+    while(span&&span.id!=='prog-log-inner-bottom'){
+      if(span.classList&&span.classList.contains('pl-chord'))break;
+      span=span.parentElement;
+      if(!span)break;
+    }
+    if(!span||!span.classList||!span.classList.contains('pl-chord'))return false;
+    var idx=parseInt(span.dataset.logIdx,10);
+    if(isNaN(idx)||!progLog[idx])return false;
+    _fired=true;
+    var it=progLog[idx];
+    var ch=CHORDS.find(function(c){return c.s===it.suf;});
+    ncPlayingKey=null;
+    selected.clear();sugHL.clear();extHL.clear();
+    if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
+    else{selected.add(it.root);}
+    renderSlices();renderCenter();updateResults();
+    if(currentMode==='next')updateNextChordPanel();
+    var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
+    var sems=voiceLeadSemitones(pcs,lastChordSemitones);
+    stopAll(true);
+    sems.forEach(function(s){_playOsc(s,sems.length,false);});
+    lastChordSemitones=[].concat(sems);
+    lastInversion=detectInversion(sems,it.root);
+    progLog.forEach(function(p){p._active=false;});
+    it._active=true;
+    renderProgLog();
+    return true;
+  }
+})();
+
 initMIDI();
 
 // ===================== INIT =====================
