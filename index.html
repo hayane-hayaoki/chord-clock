@@ -1444,7 +1444,24 @@ function updateNextChordPanel(){
   if(hits.length===0){content.innerHTML='<div id="next-chord-empty">\u30b3\u30fc\u30c9\u3092\u8b58\u5225\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f</div>';return;}
   var tonic=getTonicPc();
   if(tonic===null){content.innerHTML='<div id="next-chord-empty">Key\u3092\u9078\u629e\u3059\u308b\u3068\u30b3\u30fc\u30c9\u9032\u884c\u306e\u63d0\u6848\u304c\u8868\u793a\u3055\u308c\u307e\u3059</div>';return;}
+  // ncPlayingKey がある場合はクリックされたコードを直接使用
+  // → detect()の優先順位問題（sus4がsus2として誤認識されるなど）を回避
   var h=hits[0];
+  if(ncPlayingKey){
+    var parts=ncPlayingKey.split('_');
+    var nkRoot=parseInt(parts[0],10);
+    var nkSuf=parts.slice(1).join('_'); // suffixに'_'が含まれる場合に対応
+    // selectedの音集合がncPlayingKeyのコードと一致するか確認
+    var nkCh=CHORDS.find(function(c){return c.s===nkSuf;});
+    if(nkCh){
+      var nkPcs=nkCh.iv.map(function(iv){return(nkRoot+iv)%12;}).sort(function(a,b){return a-b;});
+      var selSorted=sel.slice().sort(function(a,b){return a-b;});
+      // 音集合が一致すればncPlayingKeyのroot/sufを優先
+      if(JSON.stringify(nkPcs)===JSON.stringify(selSorted)){
+        h={root:nkRoot,s:nkSuf,l:nkCh.l,pri:nkCh.pri};
+      }
+    }
+  }
   var currentName=fmtChordLabel(h.root,h.s);
   var result=buildNextChords(h.root,h.s);
   if(!result){content.innerHTML='<div id="next-chord-empty">Key\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044</div>';return;}
@@ -1458,15 +1475,31 @@ function updateNextChordPanel(){
     tag.className='nc-tag g'+grp;
     if(ncPlayingKey===k)tag.classList.add('nc-playing');
     tag.innerHTML='<span class="nc-tag-name">'+label+'</span><span class="nc-tag-desc">'+cand.desc+'</span>';
-    (function(rp,cs){tag.addEventListener('click',function(){
-      ncPlayingKey=rp+'_'+cs;
-      var ch=CHORDS.find(function(c){return c.s===cs;});
-      selected.clear();sugHL.clear();extHL.clear();
-      if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
-      else{selected.add(rp);}
-      playChordDef(rp,cs);
-      renderSlices();renderCenter();updateResults();updateNextChordPanel();
-    });})(rootPc,cand.suf);
+    (function(rp,cs){
+      // pointerdown で即処理: iOSでclickが遅延・キャンセルされてもハイライトが残らない
+      var _pdX=0,_pdY=0,_moved=false;
+      tag.addEventListener('pointerdown',function(e){
+        _pdX=e.clientX;_pdY=e.clientY;_moved=false;
+      },{passive:true});
+      tag.addEventListener('pointermove',function(e){
+        if(Math.abs(e.clientX-_pdX)>8||Math.abs(e.clientY-_pdY)>8)_moved=true;
+      },{passive:true});
+      tag.addEventListener('pointerup',function(e){
+        if(_moved)return; // スクロール中はキャンセル
+        e.preventDefault();
+        ncPlayingKey=rp+'_'+cs;
+        var ch=CHORDS.find(function(c){return c.s===cs;});
+        selected.clear();sugHL.clear();extHL.clear();
+        if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
+        else{selected.add(rp);}
+        playChordDef(rp,cs);
+        renderSlices();renderCenter();updateResults();updateNextChordPanel();
+      });
+      // clickも残す（マウス操作との互換性）ただし二重発火防止
+      var _handled=false;
+      tag.addEventListener('pointerup',function(){_handled=true;setTimeout(function(){_handled=false;},300);},{passive:true,capture:true});
+      tag.addEventListener('click',function(e){if(_handled)e.stopImmediatePropagation();});
+    })(rootPc,cand.suf);
     return tag;
   }
   var wrap=document.createElement('div');
