@@ -319,6 +319,7 @@ body.next-mode #prog-log-wrap{display:block;}
 }
 body.piano-mode #piano-mode-wrap { display: flex; }
 body.piano-mode #main-row { display: none !important; }
+body.piano-mode #next-chord-panel { display: none !important; }
 body.piano-mode #results-area { display: none !important; }
 body.piano-mode #suggestions { display: none !important; }
 body.piano-mode #extend-area { display: none !important; }
@@ -576,7 +577,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v8';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v10';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -2244,6 +2245,8 @@ function pianoClearAll(){
   pianoSelected.clear();
   stopAll(true);
   ncPlayingKey=null;
+  // ncPlayingKeyをnullにした後パネルを再描画してハイライトを消す
+  if(currentMode==='next')updateNextChordPanel();
   renderPianoKeys();
   updatePianoResult();
 }
@@ -2253,6 +2256,8 @@ function pianoReplay(){
   stopAll(true);
   pianoHeldNotes.clear();
   ncPlayingKey=null;
+  // ncPlayingKeyをnullにした後パネルを再描画してハイライトを消す
+  if(currentMode==='next')updateNextChordPanel();
   var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
   var nv = midiArr.length;
   midiArr.forEach(function(m){ _playOsc(m, nv, false); });
