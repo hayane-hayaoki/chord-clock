@@ -575,7 +575,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v4';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v5';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -1014,14 +1014,11 @@ function renderProgLog(){
   const ROW_SIZE=8; // 1行あたりのコード数
   function buildItems(target){
     progLog.forEach(function(item,i){
-      // 8個目の直後（i===ROW_SIZE）に改行ブレークを挿入
       if(i===ROW_SIZE){
         var br=document.createElement('div');
         br.style.cssText='width:100%;height:0;flex-basis:100%;';
         target.appendChild(br);
       }
-      // 矢印: 行頭（i===0 or i===ROW_SIZE）以外に付ける
-      // i===ROW_SIZEは改行直後の行頭なので矢印不要
       if(i>0&&i!==ROW_SIZE&&i!==ROW_SIZE+1){
         var arr=document.createElement('span');arr.className='pl-arrow';arr.textContent='>';target.appendChild(arr);
       }
@@ -1031,54 +1028,76 @@ function renderProgLog(){
       span.className='pl-chord'+(isActive?' pl-active':isLast?' pl-current':'');
       span.textContent=item.name;
       span.title='\u30af\u30ea\u30c3\u30af\u3067\u518d\u751f';
-      (function(it){
-        var _tx=0,_ty=0,_tf=false;
-        function _play(){
-          var ch=CHORDS.find(function(c){return c.s===it.suf;});
-          ncPlayingKey=null;
-          selected.clear();sugHL.clear();extHL.clear();
-          if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
-          else{selected.add(it.root);}
-          renderSlices();renderCenter();updateResults();
-          if(currentMode==='next')updateNextChordPanel();
-          var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
-          var sems=voiceLeadSemitones(pcs,lastChordSemitones);
-          stopAll(true);
-          sems.forEach(function(s){_playOsc(s,sems.length,false);});
-          lastChordSemitones=[].concat(sems);
-          lastInversion=detectInversion(sems,it.root);
-          progLog.forEach(function(p){p._active=false;});
-          it._active=true;
-          renderProgLog();
-        }
-        span.addEventListener('touchstart',function(e){var t=e.touches[0];_tx=t.clientX;_ty=t.clientY;_tf=false;},{passive:true});
-        span.addEventListener('touchend',function(e){
-          if(_tf)return;var t=e.changedTouches[0];
-          var dx=t.clientX-_tx,dy=t.clientY-_ty;
-          if(dx*dx+dy*dy>100)return;
-          e.preventDefault();_tf=true;_play();
-        });
-        span.addEventListener('click',function(){if(_tf){_tf=false;return;}_play();});
-      })(item);
+      // data属性でindex保持 → Event Delegationで使用
+      span.dataset.logIdx=i;
       target.appendChild(span);
     });
     var clr=document.createElement('span');
     clr.className='pl-clear';clr.textContent='\u2715';clr.title='\u30ed\u30b0\u3092\u30af\u30ea\u30a2';
-    (function(){
-      var _tx=0,_ty=0,_tf=false;
-      function _clear(){progLog=[];renderProgLog();}
-      clr.addEventListener('touchstart',function(e){var t=e.touches[0];_tx=t.clientX;_ty=t.clientY;_tf=false;},{passive:true});
-      clr.addEventListener('touchend',function(e){
-        if(_tf)return;var t=e.changedTouches[0];
-        var dx=t.clientX-_tx,dy=t.clientY-_ty;
-        if(dx*dx+dy*dy>100)return;
-        e.preventDefault();_tf=true;_clear();
-      });
-      clr.addEventListener('click',function(){if(_tf){_tf=false;return;}_clear();});
-    })();
+    clr.dataset.logClear='1';
     target.appendChild(clr);
   }
   buildItems(innerB);
+
+  // Event Delegation: innerBに一度だけ設定
+  if(!innerB._delegated){
+    innerB._delegated=true;
+    var _ltx=0,_lty=0,_lFired=false,_lTarget=null;
+
+    function _logActivate(el){
+      // pl-clear
+      if(el.dataset&&el.dataset.logClear){
+        progLog=[];renderProgLog();return;
+      }
+      // pl-chord: data-log-idxで該当コードを特定
+      var span=el;
+      while(span&&span!==innerB){
+        if(span.dataset&&span.dataset.logIdx!==undefined)break;
+        span=span.parentElement;
+      }
+      if(!span||span===innerB)return;
+      var idx=parseInt(span.dataset.logIdx,10);
+      if(isNaN(idx)||!progLog[idx])return;
+      var it=progLog[idx];
+      var ch=CHORDS.find(function(c){return c.s===it.suf;});
+      ncPlayingKey=null;
+      selected.clear();sugHL.clear();extHL.clear();
+      if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
+      else{selected.add(it.root);}
+      renderSlices();renderCenter();updateResults();
+      if(currentMode==='next')updateNextChordPanel();
+      var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
+      var sems=voiceLeadSemitones(pcs,lastChordSemitones);
+      stopAll(true);
+      sems.forEach(function(s){_playOsc(s,sems.length,false);});
+      lastChordSemitones=[].concat(sems);
+      lastInversion=detectInversion(sems,it.root);
+      progLog.forEach(function(p){p._active=false;});
+      it._active=true;
+      renderProgLog();
+    }
+
+    innerB.addEventListener('touchstart',function(e){
+      var t=e.touches[0];
+      _ltx=t.clientX;_lty=t.clientY;_lFired=false;
+      _lTarget=e.target;
+    },{passive:true});
+
+    innerB.addEventListener('touchend',function(e){
+      if(_lFired)return;
+      var t=e.changedTouches[0];
+      var dx=t.clientX-_ltx,dy=t.clientY-_lty;
+      if(dx*dx+dy*dy>100)return;
+      e.preventDefault();
+      _lFired=true;
+      _logActivate(_lTarget||e.target);
+    });
+
+    innerB.addEventListener('click',function(e){
+      if(_lFired){_lFired=false;return;}
+      _logActivate(e.target);
+    });
+  }
 }
 // ---- Public play functions ----
 // rootPosition: rootPcを最低音に固定した配置を返す（Analyze/Playモード用）
@@ -1497,38 +1516,10 @@ function updateNextChordPanel(){
     var tag=document.createElement('div');
     tag.className='nc-tag g'+grp;
     if(ncPlayingKey===k)tag.classList.add('nc-playing');
+    // data属性でrp/csを保持 → 親要素でのEvent Delegationで使用
+    tag.dataset.rp=rootPc;
+    tag.dataset.cs=cand.suf;
     tag.innerHTML='<span class="nc-tag-name">'+label+'</span><span class="nc-tag-desc">'+cand.desc+'</span>';
-    (function(rp,cs){
-      var _tsX=0,_tsY=0,_didFire=false;
-      function _activate(){
-        ncPlayingKey=rp+'_'+cs;
-        var ch=CHORDS.find(function(c){return c.s===cs;});
-        selected.clear();sugHL.clear();extHL.clear();
-        if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
-        else{selected.add(rp);}
-        playChordDef(rp,cs);
-        renderSlices();renderCenter();updateResults();updateNextChordPanel();
-      }
-      // touchstart/touchend: iOS scrollable container内でも確実に届く
-      tag.addEventListener('touchstart',function(e){
-        var t=e.touches[0];
-        _tsX=t.clientX;_tsY=t.clientY;_didFire=false;
-      },{passive:true});
-      tag.addEventListener('touchend',function(e){
-        if(_didFire)return;
-        var t=e.changedTouches[0];
-        var dx=t.clientX-_tsX, dy=t.clientY-_tsY;
-        if(dx*dx+dy*dy>100)return; // 10px以上移動=スクロール→無視
-        e.preventDefault(); // clickの二重発火を防ぐ
-        _didFire=true;
-        _activate();
-      });
-      // マウス用フォールバック(touchendで処理済みなら無視)
-      tag.addEventListener('click',function(e){
-        if(_didFire){_didFire=false;return;}
-        _activate();
-      });
-    })(rootPc,cand.suf);
     return tag;
   }
   var wrap=document.createElement('div');
@@ -1575,6 +1566,54 @@ function updateNextChordPanel(){
     div.appendChild(tags);wrap.appendChild(div);
   });
   content.innerHTML='';content.appendChild(wrap);
+
+  // Event Delegation: #next-chord-content に一度だけ設定
+  // (dynamic生成タグへの直接リスナーがiOS PWAで届かない問題を回避)
+  if(!content._delegated){
+    content._delegated=true;
+    var _dtx=0,_dty=0,_dFired=false,_dTarget=null;
+
+    function _ncActivate(el){
+      // nc-tag自身またはその子(nc-tag-name/desc)から親nc-tagを探す
+      var tag=el;
+      while(tag&&tag!==content){
+        if(tag.classList&&tag.classList.contains('nc-tag'))break;
+        tag=tag.parentElement;
+      }
+      if(!tag||tag===content)return;
+      var rp=parseInt(tag.dataset.rp,10);
+      var cs=tag.dataset.cs;
+      if(isNaN(rp)||cs===undefined)return;
+      ncPlayingKey=rp+'_'+cs;
+      var ch=CHORDS.find(function(c){return c.s===cs;});
+      selected.clear();sugHL.clear();extHL.clear();
+      if(ch){ch.iv.forEach(function(iv){selected.add((rp+iv)%12);});}
+      else{selected.add(rp);}
+      playChordDef(rp,cs);
+      renderSlices();renderCenter();updateResults();updateNextChordPanel();
+    }
+
+    content.addEventListener('touchstart',function(e){
+      var t=e.touches[0];
+      _dtx=t.clientX;_dty=t.clientY;_dFired=false;
+      _dTarget=e.target;
+    },{passive:true});
+
+    content.addEventListener('touchend',function(e){
+      if(_dFired)return;
+      var t=e.changedTouches[0];
+      var dx=t.clientX-_dtx,dy=t.clientY-_dty;
+      if(dx*dx+dy*dy>100)return;
+      e.preventDefault();
+      _dFired=true;
+      _ncActivate(_dTarget||e.target);
+    });
+
+    content.addEventListener('click',function(e){
+      if(_dFired){_dFired=false;return;}
+      _ncActivate(e.target);
+    });
+  }
 }
 
 // ===================== SVG =====================
