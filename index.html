@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="C-C">
@@ -41,7 +41,7 @@ html,body{
 }
 #key-selector label{font-size:11px;color:#666;white-space:nowrap;font-weight:600;letter-spacing:.4px}
 #key-select{
-  font-size:12px;padding:5px 10px;border-radius:18px;
+  font-size:clamp(12px, 1.5vw, 15px);padding:5px 10px;border-radius:18px;
   border:1px solid #444;background:#2a2a2e;color:#666;
   cursor:pointer;min-width:140px;max-width:220px;
   font-weight:600;letter-spacing:.3px;
@@ -60,7 +60,8 @@ html,body{
 #svg-wrap{
   width:100%;
   padding:0 4px;
-  max-width:min(98vw, 62vh);
+  /* 縦持ち: vmin基準でiPad画面の短辺いっぱい、横持ち: vwで広く */
+  max-width:min(96vw, 86vmin);
 }
 @media(max-width:600px){
   #svg-wrap{max-width:98vw;}
@@ -81,7 +82,7 @@ html,body{
   text-align:left;
 }
 .result-block:first-child{border-color:#4a7aae;background:#252830}
-.rb-chord{font-size:18px;font-weight:700;color:#e8e4dc;margin-bottom:1px}
+.rb-chord{font-size:clamp(18px, 2.4vw, 26px);font-weight:700;color:#e8e4dc;margin-bottom:1px}
 .rb-notes{font-size:10px;color:#888}
 .rb-ivs{font-size:10px;color:#555;letter-spacing:.2px}
 #suggestions{width:100%;min-height:40px;padding:4px 10px;text-align:center}
@@ -101,7 +102,7 @@ html,body{
   border:1px solid #444;overflow:hidden;
 }
 .mode-btn{
-  font-size:12px;font-weight:600;letter-spacing:.4px;
+  font-size:clamp(12px, 1.6vw, 16px);font-weight:600;letter-spacing:.4px;
   padding:6px 20px;cursor:pointer;border:none;background:transparent;
   color:#666;transition:all .18s;user-select:none;
 }
@@ -109,7 +110,10 @@ html,body{
   background:#4A90D9;color:#fff;border-radius:18px;
 }
 /* Play mode: pizza slices get touch-active glow */
-body.play-mode #pizza .sg{touch-action:none;}
+body.play-mode #pizza .sg{touch-action:manipulation;}
+#pizza .sg{touch-action:manipulation;-webkit-user-select:none;user-select:none;}
+#pizza{touch-action:manipulation;-webkit-user-select:none;user-select:none;}
+*{-webkit-tap-highlight-color:transparent;}
 body.play-mode .rb-chord{color:#7ec8f0}
 /* Hint blink animation for +1 note suggestion */
 @keyframes hintBlink{
@@ -132,7 +136,7 @@ body.next-mode #main-row{
 /* Next mode: 左カラム = ピザ + 今のコード（右寄せ） */
 body.next-mode #next-left-col{
   display:flex;flex-direction:column;align-items:flex-end;
-  flex:0 0 auto;width:min(52vw,50vh);
+  flex:0 0 auto;width:min(52vw,46vmin);
 }
 body.next-mode #svg-wrap{
   width:100%;max-width:none;padding:0 4px;
@@ -150,7 +154,7 @@ body.next-mode #next-chord-panel{
   flex:0 0 auto;
   width:min(44vw,380px);
   min-width:180px;
-  height:calc(min(52vw,50vh) + 60px);overflow-y:auto;
+  height:calc(min(52vw,46vmin) + 60px);overflow-y:auto;
   padding:6px 8px 10px;
 }
 /* コード履歴: 左カラム(ピザ下)に配置、Next mode時のみ表示 */
@@ -210,7 +214,7 @@ body.piano-mode .rb-inversion{display:inline-block;}
 .nc-section-desc{font-size:9px;color:#555;white-space:nowrap;}
 .nc-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;}
 .nc-tag{
-  font-size:11px;font-weight:600;border-radius:6px;padding:3px 8px;
+  font-size:clamp(11px, 1.4vw, 15px);font-weight:600;border-radius:6px;padding:3px 8px;
   cursor:pointer;border:1px solid transparent;transition:all .15s;user-select:none;
   display:flex;flex-direction:column;align-items:flex-start;gap:1px;
 }
@@ -253,14 +257,14 @@ body.next-mode #prog-log-wrap{display:block;}
 }
 #prog-log-inner::-webkit-scrollbar{display:none;}
 .pl-chord{
-  font-size:11px;font-weight:700;color:#888;background:#242428;border:1px solid #333;
-  border-radius:5px;padding:2px 7px;white-space:nowrap;cursor:pointer;
+  font-size:clamp(10px, 1.2vw, 13px);font-weight:700;color:#888;background:#242428;border:1px solid #333;
+  border-radius:5px;padding:2px 5px;white-space:nowrap;cursor:pointer;
   transition:color .12s,border-color .12s;user-select:none;flex-shrink:0;
 }
 .pl-chord:hover{color:#bbb;border-color:#555;}
 .pl-chord.pl-current{color:#e8e4dc;border-color:#4a7aae;background:#252830;}
 .pl-chord.pl-active{color:#fff;border-color:#7c5cbf;background:#2a2240;}
-.pl-arrow{font-size:9px;color:#3a3a3e;padding:0 2px;flex-shrink:0;}
+.pl-arrow{font-size:8px;color:#3a3a3e;padding:0 1px;flex-shrink:0;}
 .pl-clear{
   font-size:9px;color:#444;cursor:pointer;padding:2px 6px;border-radius:4px;
   border:1px solid transparent;flex-shrink:0;margin-left:4px;white-space:nowrap;
@@ -316,7 +320,7 @@ body.piano-mode #extend-area { display: none !important; }
 /* Piano layout: switches row + fixed-height result area + keyboard */
 #piano-controls-row {
   width: 100%;
-  max-width: 700px;
+  max-width: 900px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -329,7 +333,7 @@ body.piano-mode #extend-area { display: none !important; }
    overflow:hidden でクリップ → 何があっても鍵盤は動かない        */
 #piano-info-zone {
   width: 100%;
-  max-width: 700px;
+  max-width: 900px;
   height: 100px;
   overflow: hidden;
   display: flex;
@@ -374,7 +378,7 @@ body.piano-mode #extend-area { display: none !important; }
 /* Piano keyboard container */
 #piano-keyboard-wrap {
   width: 100%;
-  max-width: 700px;
+  max-width: 900px;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
@@ -387,7 +391,7 @@ body.piano-mode #extend-area { display: none !important; }
 /* Bottom action row: clear (left) + replay (right) */
 #piano-action-row {
   width: 100%;
-  max-width: 700px;
+  max-width: 900px;
   display: flex;
   gap: 6px;
   margin-top: 6px;
@@ -852,6 +856,19 @@ document.addEventListener('DOMContentLoaded',function(){
 
 function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
+  // 同じsemitoneが既に鳴っている場合は先に即時停止（二重登録防止）
+  if(activeNodes.has(semitone)){
+    const old=activeNodes.get(semitone);
+    try{
+      const og=old.vGain.gain;
+      const ot=ac.currentTime+AHEAD;
+      og.cancelScheduledValues(ot);
+      og.setValueAtTime(Math.max(og.value,0.0001),ot);
+      og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
+      old.osc.stop(ot+FADE_IMM+0.002);
+    }catch(e){}
+    activeNodes.delete(semitone);
+  }
   const freq=442*Math.pow(2,(semitone-69)/12);
   const level=voiceLevel(nVoices)*loudnessComp(semitone);
   const t=ac.currentTime+START_OFFSET;
@@ -864,35 +881,42 @@ function _playOsc(semitone,nVoices,holdMode){
   g.setValueAtTime(0.0001,t);
   g.exponentialRampToValueAtTime(level,t+0.012);
   if(holdMode||_sustainOn){
-    // Play モード or サスティンペダル中: ゆっくり減衰、離したら releaseVoice() / _sustainRelease() で止める
+    // Play モード or サスティンペダル中: ゆっくり減衰、離したら releaseVoice() で止める
     g.setValueAtTime(level,t+0.012);
     g.linearRampToValueAtTime(level*0.85,t+0.4);
     g.linearRampToValueAtTime(level*0.65,t+1.5);
-    // 長押し対策: 10秒で完全消音
-    g.linearRampToValueAtTime(0.0001,t+10);
+    // 長押し対策: 12秒で完全消音
+    g.linearRampToValueAtTime(0.0001,t+12);
   } else {
-    // Analyze / Next モード: 3.5秒サスティン
+    // Analyze / Next / Piano Normal モード: 3.5秒サスティン
     g.setValueAtTime(level,t+0.012);
     g.linearRampToValueAtTime(0.0001,t+3.5);
   }
   osc.connect(vGain);
   vGain.connect(mixGain);
   osc.start(t);
-  osc.stop(t+10.1); // envelope 終了より少し後
+  // holdModeのosc.stopはreleaseVoiceに任せ、ここでは長めに設定
+  osc.stop(t+12.1);
   activeNodes.set(semitone,{osc,vGain});
 }
 
-// Play モードのリリース: 押鍵中の vGain を 150ms でフェードアウト
+// Play モードのリリース: 押鍵中の vGain を 120ms でフェードアウト
 function releaseVoice(n){
   if(!activeNodes.has(n))return;
   const{osc,vGain}=activeNodes.get(n);
   activeNodes.delete(n);
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
-  if(g.cancelAndHoldAtTime){ g.cancelAndHoldAtTime(t); }
-  else { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(g.value,0.0001),t); }
-  g.exponentialRampToValueAtTime(0.0001,t+0.15);
-  try{osc.stop(t+0.160);}catch(e){}
+  // cancelAndHoldAtTime と cancelScheduledValues の両方を試みる（Safari互換性）
+  try{ if(g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t); } catch(e){}
+  try{
+    g.cancelScheduledValues(t);
+    // 現在値をスナップショット（0以下にならないよう0.0001でクランプ）
+    const cur=Math.max(g.value, 0.0001);
+    g.setValueAtTime(cur, t);
+  }catch(e){}
+  g.exponentialRampToValueAtTime(0.0001, t+0.12);
+  try{osc.stop(t+0.13);}catch(e){}
 }
 // ---- Voice leading ----
 const VL_LO=48,VL_HI=76,VL_CENTRE=60; // C3-E5, centre C4
@@ -997,6 +1021,7 @@ function renderProgLog(){
       span.title='\u30af\u30ea\u30c3\u30af\u3067\u518d\u751f';
       (function(it){span.addEventListener('click',function(){
         var ch=CHORDS.find(function(c){return c.s===it.suf;});
+        ncPlayingKey=null; // ハイライト解除を先に
         selected.clear();sugHL.clear();extHL.clear();
         if(ch){ch.iv.forEach(function(iv){selected.add((it.root+iv)%12);});}
         else{selected.add(it.root);}
@@ -1008,7 +1033,6 @@ function renderProgLog(){
         sems.forEach(function(s){_playOsc(s,sems.length,false);});
         lastChordSemitones=[].concat(sems);
         lastInversion=detectInversion(sems,it.root);
-        ncPlayingKey=null;
         progLog.forEach(function(p){p._active=false;});
         it._active=true;
         renderProgLog();
@@ -1241,10 +1265,10 @@ var MOOD_RULES={
   universal:{
     0:{g1:[[5,'','I\u2192IV'],[7,'','I\u2192V'],[9,'m','I\u2192VIm'],[2,'m','I\u2192IIm']],
        g2:[[5,'M7','IVM7'],[7,'7','V7'],[9,'m7','VIm7'],[7,'sus4','Vsus4'],[4,'m','IIIm'],[11,'dim','VIIdim']],
-       g3:[[6,'','\u266dV'],[3,'','\u266dIII\u501f\u7528'],[8,'','\u266dVI\u501f\u7528'],[10,'','\u266dVII'],[1,'m7\u266d5','\u266dIIm7\u266d5']]},
+       g3:[[6,'','\u266dV'],[3,'','\u266dIII\u501f\u7528'],[8,'','\u266dVI\u501f\u7528'],[10,'','\u266dVII'],[1,'m7\u266d5','\u266dIIm7\u266d5'],[1,'M7','\u266dIImaj7']]},
     5:{g1:[[7,'','IV\u2192V'],[0,'','IV\u2192I'],[7,'7','V7'],[9,'m','IV\u2192VIm']],
        g2:[[2,'m7','IIm7'],[7,'sus4','Vsus4'],[4,'m','IIIm'],[7,'9','V9'],[11,'dim','VIIdim']],
-       g3:[[11,'7','\u266dVII7'],[3,'','\u266dIII'],[8,'','\u266dVI'],[5,'m','IVm'],[2,'7','II7']]},
+       g3:[[11,'7','\u266dVII7'],[3,'','\u266dIII'],[8,'','\u266dVI'],[5,'m','IVm'],[2,'7','II7'],[0,'add9','Iadd9']]},
     7:{g1:[[0,'','V\u2192I'],[9,'m','V\u2192VIm\u507d\u7d42\u6b62'],[0,'M7','IM7'],[5,'','V\u2192IV']],
        g2:[[9,'m7','VIm7'],[4,'m','V\u2192IIIm'],[0,'add9','Iadd9'],[2,'m','V\u2192IIm'],[11,'dim7','VIIdim7']],
        g3:[[1,'M7','\u266dIImaj7'],[8,'','\u266dVI'],[3,'','\u266dIII'],[10,'','\u266dVII'],[6,'dim7','\u266dVdim7']]},
@@ -1262,10 +1286,10 @@ var MOOD_RULES={
         g3:[[6,'dim7','\u5bfe\u79f0dim7'],[3,'dim7','\u266dIIIdim7'],[1,'M7','\u266dIImaj7'],[8,'M7','\u266dVImaj7']]},
   },
   pop:{
-    0:{g1:[[5,'','I\u2192IV\u9244\u677f'],[9,'m','I\u2192VIm J-Pop'],[5,'M7','IVM7 \u722c\u3084\u304b'],[7,'','I\u2192V']],
-       g2:[[2,'m','IIm'],[4,'m','IIIm \u30ad\u30e5\u30f3'],[7,'sus4','Vsus4'],[9,'m7','VIm7'],[2,'m7','IIm7']],
+    0:{g1:[[5,'','I\u2192IV\u9244\u677f'],[9,'m','I\u2192VIm \u5c0f\u5ba4\u9032\u884c'],[5,'M7','IVM7 \u723d\u3084\u304b'],[7,'','I\u2192V']],
+       g2:[[2,'m','IIm'],[4,'m','IIIm \u30ad\u30e5\u30f3'],[7,'sus4','Vsus4'],[9,'m7','VIm7'],[2,'m7','IIm7'],[5,'M7','IVM7']],
        g3:[[7,'7','V7 \u30c9\u30e9\u30de'],[0,'add9','Iadd9 \u30ad\u30e9\u30ad\u30e9'],[4,'','III \u30b5\u30d7\u30e9\u30a4\u30ba']]},
-    5:{g1:[[9,'m','IV\u2192VIm J-Pop'],[7,'','IV\u2192V'],[0,'','IV\u2192I'],[2,'m','IV\u2192IIm']],
+    5:{g1:[[9,'m','IV\u2192VIm \u9ec4\u91d1\u9032\u884c'],[7,'','IV\u2192V'],[0,'','IV\u2192I'],[2,'m','IV\u2192IIm']],
        g2:[[5,'M7','IVM7'],[7,'sus4','Vsus4'],[9,'m7','VIm7'],[2,'m7','IIm7']],
        g3:[[4,'m','IIIm \u610f\u5916'],[7,'7','V7'],[0,'add9','Iadd9']]},
     7:{g1:[[0,'','V\u2192I \u89e3\u6c7a'],[9,'m','\u507d\u7d42\u6b62 VIm'],[0,'M7','IM7 \u723d\u5feb']],
@@ -1274,7 +1298,7 @@ var MOOD_RULES={
     2:{g1:[[7,'','IIm\u2192V'],[5,'','IIm\u2192IV'],[9,'m','IIm\u2192VIm'],[7,'7','V7']],
        g2:[[0,'','IIm\u2192I'],[4,'m','IIm\u2192IIIm'],[7,'sus4','Vsus4'],[2,'M7','IIM7']],
        g3:[[2,'7','II7'],[5,'M7','IVM7'],[0,'add9','Iadd9']]},
-    9:{g1:[[5,'','VIm\u2192IV J-Pop'],[2,'m','VIm\u2192IIm'],[7,'','VIm\u2192V'],[0,'','VIm\u2192I']],
+    9:{g1:[[5,'','VIm\u2192IV \u5b9a\u756a'],[2,'m','VIm\u2192IIm'],[7,'','VIm\u2192V'],[0,'','VIm\u2192I']],
        g2:[[9,'m7','VIm7'],[4,'m','IIIm'],[7,'7','V7']],
        g3:[[9,'7','VI7'],[5,'M7','IVM7'],[2,'m7','IIm7']]},
     4:{g1:[[9,'m','IIIm\u2192VIm'],[5,'','IIIm\u2192IV'],[2,'m','IIIm\u2192IIm']],
@@ -1285,7 +1309,7 @@ var MOOD_RULES={
         g3:[[0,'add9','\u2192Iadd9'],[4,'m','\u2192IIIm'],[7,'sus4','\u2192Vsus4']]},
   },
   minor:{
-    0:{g1:[[5,'m','Im\u2192IVm'],[7,'','Im\u2192V'],[8,'','Im\u2192\u266dVI'],[3,'','Im\u2192\u266dIII']],
+    0:{g1:[[5,'m','Im\u2192IVm'],[7,'','Im\u2192V'],[8,'','Im\u2192\u266dVI'],[3,'','Im\u2192\u266dIII'],[2,'m7\u266d5','IIm7\u266d5']],
        g2:[[7,'7','V7\u2192\u89e3\u6c7a'],[5,'m7','IVm7'],[10,'','\u266dVII'],[2,'m7\u266d5','IIm7\u266d5']],
        g3:[[1,'M7','\u266dIImaj7 \u30d5\u30ea\u30b8\u30a2\u30f3'],[6,'dim7','dim7'],[8,'M7','\u266dVImaj7']]},
     5:{g1:[[0,'m','IVm\u2192Im'],[7,'','IVm\u2192V'],[8,'','IVm\u2192\u266dVI'],[3,'','IVm\u2192\u266dIII']],
@@ -1312,7 +1336,7 @@ var MOOD_RULES={
   },
   rock:{
     // ロック/メタル: 短調ベース。Im=トニック, ♭III/♭VI/♭VII=核心
-    0:{g1:[[10,'','Im\u2192\u266dVII \u738b\u9053'],[3,'','Im\u2192\u266dIII \u91cd\u53e3'],[5,'m','Im\u2192IVm \u56fa\u3044'],[8,'','Im\u2192\u266dVI \u6697\u9ed2']],
+    0:{g1:[[10,'','Im\u2192\u266dVII \u738b\u9053'],[3,'','Im\u2192\u266dIII \u91cd\u53e3'],[5,'m','Im\u2192IVm \u56fa\u3044'],[8,'','Im\u2192\u266dVI \u6697\u3044']],
        g2:[[7,'','V \u30c6\u30f3\u30b7\u30e7\u30f3'],[5,'','IV \u539a\u307f'],[7,'7','V7\u2192Im'],[0,'m7','Im7 \u30cb\u30e5\u30a2\u30f3\u30b9']],
        g3:[[6,'','\u266dV \u30c8\u30e9\u30a4\u30c8\u30fc\u30f3'],[1,'','\u266dII \u30d5\u30ea\u30b8\u30a2\u30f3'],[2,'m7\u266d5','IIm7\u266d5']]},
     10:{g1:[[0,'m','\u266dVII\u2192Im'],[3,'','\u266dVII\u2192\u266dIII'],[5,'m','\u266dVII\u2192IVm'],[8,'','\u266dVII\u2192\u266dVI']],
@@ -1342,7 +1366,7 @@ var MOOD_RULES={
   },
   cinematic:{
     0:{g1:[[5,'M7','IM7\u2192IVM7 \u58ee\u5927'],[8,'','I\u2192\u266dVI \u6620\u753b\u7684'],[3,'','I\u2192\u266dIII 叙\u60c5'],[7,'sus4','Vsus4 \u60a0\u7136']],
-       g2:[[9,'m7','VIm7 \u54c1\u6c88'],[5,'','IV \u5927\u5730'],[10,'','\u266dVII \u58ee\u5927'],[0,'add9','Iadd9 \u8f1d\u304d'],[2,'m7','IIm7']],
+       g2:[[9,'m7','VIm7 \u5965\u884c\u304d'],[5,'','IV \u5927\u5730'],[10,'','\u266dVII \u58ee\u5927'],[0,'add9','Iadd9 \u8f1d\u304d'],[2,'m7','IIm7'],[4,'m','IIIm \u5c0f\u7c8b\u306a']],
        g3:[[1,'M7','\u266dIImaj7 \u30cd\u30a2\u30dd\u30ea'],[6,'M7','\u266dVM7'],[8,'M7','\u266dVImaj7 \u58ee\u5927'],[4,'M7','IIM7']]},
     5:{g1:[[0,'','IV\u2192I \u5e30\u7740'],[8,'','IV\u2192\u266dVI \u5e83\u304c\u308a'],[3,'','IV\u2192\u266dIII'],[5,'M7','IVM7 \u8f1d\u304d']],
        g2:[[7,'sus4','Vsus4'],[9,'m7','VIm7'],[2,'m7','IIm7'],[10,'','\u266dVII']],
@@ -1354,13 +1378,13 @@ var MOOD_RULES={
        g2:[[8,'M7','\u266dVImaj7 \u5727\u5dfb'],[7,'','\u2192V'],[9,'m','\u2192VIm'],[2,'m','\u2192IIm']],
        g3:[[1,'M7','\u266dIImaj7'],[6,'M7','\u266dVM7 \u5e7b\u60f3'],[4,'M7','IIM7'],[8,'aug','\u266dVIaug']]},
     3:{g1:[[8,'','\u266dIII\u2192\u266dVI'],[0,'','\u266dIII\u2192I'],[5,'','\u266dIII\u2192IV'],[10,'','\u266dIII\u2192\u266dVII']],
-       g2:[[3,'M7','\u266dIIImaj7 \u6589\u60c5'],[7,'','\u2192V'],[9,'m7','VIm7'],[2,'m','IIm']],
+       g2:[[3,'M7','\u266dIIImaj7 \u53d9\u60c5'],[7,'','\u2192V'],[9,'m7','VIm7'],[2,'m','IIm']],
        g3:[[1,'M7','\u266dIImaj7'],[6,'M7','\u266dVM7'],[4,'M7','IIM7'],[8,'M7','\u266dVImaj7']]},
     10:{g1:[[0,'','\u266dVII\u2192I \u58ee\u5927'],[8,'','\u266dVII\u2192\u266dVI'],[3,'','\u266dVII\u2192\u266dIII'],[5,'','\u266dVII\u2192IV']],
         g2:[[10,'M7','\u266dVIImaj7 \u795e\u79d8'],[7,'','\u2192V'],[9,'m','\u2192VIm'],[2,'m','\u2192IIm']],
         g3:[[1,'M7','\u266dIImaj7'],[6,'M7','\u266dVM7'],[8,'M7','\u266dVImaj7'],[4,'','III \u5149']]},
     9:{g1:[[5,'M7','VIm\u2192IVM7'],[8,'','VIm\u2192\u266dVI \u6620\u753b\u7684'],[2,'m7','VIm\u2192IIm7'],[0,'','VIm\u2192I']],
-       g2:[[9,'m7','VIm7 \u54c1\u6c88'],[7,'','\u2192V'],[4,'m','\u2192IIIm'],[3,'','\u2192\u266dIII']],
+       g2:[[9,'m7','VIm7 \u5965\u884c\u304d'],[7,'','\u2192V'],[4,'m','\u2192IIIm'],[3,'','\u2192\u266dIII']],
        g3:[[1,'M7','\u266dIImaj7'],[8,'M7','\u266dVImaj7'],[6,'M7','\u266dVM7'],[10,'M7','\u266dVIImaj7']]},
     2:{g1:[[7,'sus4','IIm\u2192Vsus4 \u58ee\u5927'],[5,'M7','IIm\u2192IVM7'],[0,'M7','IIm\u2192IM7'],[8,'','\u2192\u266dVI']],
        g2:[[7,'7','V7'],[9,'m7','VIm7'],[3,'','\u266dIII'],[10,'','\u266dVII']],
@@ -1441,24 +1465,24 @@ function updateNextChordPanel(){
   wrap.appendChild(hdr);
   var MOOD_SECTION_LABELS={
     universal:[
-      {key:'g1',label:'Group 1 \u2014 \u5b9a\u756a\u30fb\u5b89\u5b9a\u7cfb',desc:'\u307e\u305a\u3053\u308c\u3092\u8a66\u305b\u308b\u738b\u9053\u9032\u884c',cls:'g1'},
+      {key:'g1',label:'Group 1 \u2014 \u5b9a\u756a\u30fb\u5b89\u5b9a\u7cfb',desc:'\u738b\u9053\u9032\u884c',cls:'g1'},
       {key:'g2',label:'Group 2 \u2014 \u304a\u3057\u3083\u308c\u7cfb',desc:'\u5c11\u3057\u6d17\u7df4\u3055\u308c\u305f\u9078\u629e\u80a2',cls:'g2'},
-      {key:'g3',label:'Group 3 \u2014 \u7279\u6b8a\u30fb\u5f71\u7d20\u7cfb',desc:'\u9032\u884c\u306b\u30b9\u30d1\u30a4\u30b9\u3092\u52a0\u3048\u308b\u4e00\u6589',cls:'g3'},
+      {key:'g3',label:'Group 3 \u2014 \u7279\u6b8a\u30fb\u30b9\u30d1\u30a4\u30b9\u7cfb',desc:'\u9032\u884c\u306b\u30b9\u30d1\u30a4\u30b9\u3092\u52a0\u3048\u308b\u4e00\u624b',cls:'g3'},
     ],
     pop:[
       {key:'g1',label:'Hook 1 \u2014 \u9244\u677f\u30ad\u30e3\u30c3\u30c1\u30fc\u7cfb',desc:'\u8033\u306b\u6b8b\u308b\u5b9a\u756a\u9032\u884c',cls:'g1'},
-      {key:'g2',label:'Hook 2 \u2014 \u304a\u3057\u3083\u308c\u30fb\u6d17\u7df4\u7cfb',desc:'J-Pop\u30fb\u30b7\u30c6\u30a3\u30dd\u30c3\u30d7\u306e\u5b9a\u7d04\u624b',cls:'g2'},
+      {key:'g2',label:'Hook 2 \u2014 \u304a\u3057\u3083\u308c\u30fb\u6d17\u7df4\u7cfb',desc:'J-Pop\u30fb\u30b7\u30c6\u30a3\u30dd\u30c3\u30d7\u306e\u5b9a\u756a\u30b3\u30fc\u30c9',cls:'g2'},
       {key:'g3',label:'Hook 3 \u2014 \u30b5\u30d7\u30e9\u30a4\u30ba\u7cfb',desc:'\u610f\u8868\u3092\u3064\u304f\u9b45\u60d1\u306e\u4e00\u624b',cls:'g3'},
     ],
     minor:[
-      {key:'g1',label:'Dark 1 \u2014 \u6697\u9ed2\u30fb\u738b\u9053\u7cfb',desc:'\u30de\u30a4\u30ca\u30fc\u8abf\u306e\u5b9a\u756a\u9032\u884c',cls:'g1'},
-      {key:'g2',label:'Dark 2 \u2014 \u30c9\u30e9\u30de\u30c1\u30c3\u30af\u7cfb',desc:'\u60c5\u8abb\u3092\u52d5\u304b\u3059\u7dca\u5f35\u611f\u306e\u3042\u308b\u9078\u629e',cls:'g2'},
-      {key:'g3',label:'Dark 3 \u2014 \u6df1\u5c64\u30fb\u5b9f\u9a13\u7cfb',desc:'\u30af\u30e9\u30b7\u30c3\u30af\u30fb\u30b8\u30e3\u30ba\u9032\u884c\u304b\u3089\u306e\u5f15\u7528',cls:'g3'},
+      {key:'g1',label:'Dark 1 \u2014 \u54c0\u6101\u30fb\u738b\u9053\u7cfb',desc:'\u30de\u30a4\u30ca\u30fc\u8abf\u306e\u5b9a\u756a\u9032\u884c',cls:'g1'},
+      {key:'g2',label:'Dark 2 \u2014 \u30c9\u30e9\u30de\u30c1\u30c3\u30af\u7cfb',desc:'\u60c5\u7dd2\u3092\u63fa\u3055\u3076\u308b\u7dca\u5f35\u611f\u306e\u3042\u308b\u9078\u629e',cls:'g2'},
+      {key:'g3',label:'Dark 3 \u2014 \u6df1\u5c64\u30fb\u30af\u30e9\u30b7\u30c3\u30af\u7cfb',desc:'\u30af\u30e9\u30b7\u30c3\u30af\u30fb\u30b8\u30e3\u30ba\u9032\u884c\u304b\u3089\u306e\u5f15\u7528',cls:'g3'},
     ],
     rock:[
-      {key:'g1',label:'RIFF 1 \u2014 \u738b\u9053\u30d1\u30ef\u30fc\u7cfb',desc:'\u30ed\u30c3\u30af\u30fb\u30e1\u30bf\u30eb\u5b9a\u756a\u306e\u591a\u5ea6\u6bba\u3057\u9032\u884c',cls:'g1'},
+      {key:'g1',label:'RIFF 1 \u2014 \u738b\u9053\u30d1\u30ef\u30fc\u7cfb',desc:'\u30ed\u30c3\u30af\u30fb\u30e1\u30bf\u30eb\u306e\u9aa8\u592a\u306a\u5b9a\u756a\u9032\u884c',cls:'g1'},
       {key:'g2',label:'RIFF 2 \u2014 \u30b0\u30eb\u30fc\u30f4\u30fb\u91cd\u53e3\u7cfb',desc:'\u30cf\u30fc\u30c9\u30ed\u30c3\u30af\u306e\u9aa8\u683c\u306b\u306a\u308b\u9032\u884c',cls:'g2'},
-      {key:'g3',label:'RIFF 3 \u2014 \u30a2\u30b0\u30ec\u30c3\u30b7\u30d6\u30fb\u5d29\u58ca\u7cfb',desc:'\u30c8\u30ea\u30c3\u30ad\u30fc\u306a\u548c\u9f13\u3067\u517c\u306d\u3092\u5d29\u3059',cls:'g3'},
+      {key:'g3',label:'RIFF 3 \u2014 \u30a2\u30b0\u30ec\u30c3\u30b7\u30d6\u30fb\u5d29\u58ca\u7cfb',desc:'\u30c8\u30ea\u30c3\u30ad\u30fc\u306a\u548c\u97f3\u3067\u5747\u8861\u3092\u5d29\u3059',cls:'g3'},
     ],
     cinematic:[
       {key:'g1',label:'Scene 1 \u2014 \u58ee\u5927\u30fb\u611f\u52d5\u7cfb',desc:'\u30b9\u30af\u30ea\u30fc\u30f3\u3092\u57cb\u3081\u5c3d\u304f\u3059\u5f37\u529b\u306a\u9032\u884c',cls:'g1'},
@@ -2092,10 +2116,10 @@ var _keydownHandler = function(e){
     if(kbPc !== undefined){
       e.preventDefault();
       if(e.repeat) return;
-      var startMidi = 60; // キーボード基点は常にC4固定（表示オクターブに関わらず）
+      var startMidi = getPianoStartMidi(); // オクターブ設定に合わせた基点
       var kbMidi;
       if(e.code === 'Backquote'){
-        // ` = B just below the start octave (B3=59 when startMidi=60)
+        // ` = B just below the start octave
         kbMidi = startMidi - 1;
       } else {
         // 2nd-octave codes: white keys 8/9/0/-/= and black keys F8/F9/F11/F12
@@ -2183,7 +2207,7 @@ var pianoSelected = new Set(); // absolute MIDI notes
 // For Play mode: track which midi notes are currently held (pointerdown active)
 var pianoHeldNotes = new Set();
 
-function getPianoStartMidi(){ return pianoOctaves===3 ? 48 : 60; }
+function getPianoStartMidi(){ return pianoOctaves===3 ? 60 : 60; }
 
 function setPianoOctaves(n){
   pianoOctaves = n;
@@ -2447,20 +2471,18 @@ function renderPianoKeyboard(){
   }
 }
 
-// Normal mode: toggle+sustain, plays ALL currently selected notes on each new press
+// Normal mode: 新規音のみ発音（既存音はそのままキープ）
+// オクターブ数に関わらずサスティンは常に3.5秒
 function pianoKeyPressNormal(midi){
   if(pianoSelected.has(midi)){
-    // Deselect and stop
+    // この音だけ停止・選択解除
     pianoSelected.delete(midi);
     if(activeNodes.has(midi)) stopNote(midi, true);
   } else {
-    // Add note, then play ALL selected notes together (Analyze-style chord sound)
+    // 新しい音だけ追加発音（既存の鳴っている音はキープ）
     pianoSelected.add(midi);
-    var allMidi = Array.from(pianoSelected).sort(function(a,b){return a-b;});
-    // Stop existing sustains and replay all together
-    stopAll(true);
-    var nv = allMidi.length;
-    allMidi.forEach(function(m){ _playOsc(m, nv, false); }); // false = 3.5s sustain
+    var nv = pianoSelected.size;
+    _playOsc(midi, nv, false); // false = 3.5s sustain（oct数に無関係）
   }
   renderPianoKeys();
   updatePianoResult();
@@ -2469,6 +2491,10 @@ function pianoKeyPressNormal(midi){
 // Play mode: pointerdown = start note (hold), pointerup = release note
 function pianoKeyPressPlayDown(midi){
   if(pianoHeldNotes.has(midi)) return; // already held
+  // 同じmidiが既にactiveNodesにある場合は明示的にクリーン（_playOsc内でも処理するが念のため）
+  if(activeNodes.has(midi)){
+    releaseVoice(midi); // 古いoscを確実に止める
+  }
   pianoHeldNotes.add(midi);
   pianoSelected.add(midi);
   var nv = pianoHeldNotes.size;
@@ -2623,6 +2649,26 @@ var _sustainOn=false;
 function _sustainRelease(){
   if(!actx)return;
   const t=actx.currentTime+AHEAD;
+  if(currentMode==='piano'){
+    // Pianoモード: Playモード中はheld以外をリリース、Normalモードは自然減衰に任せる
+    if(pianoPlayMode==='play'){
+      var toDelete=[];
+      activeNodes.forEach(function(node,n){
+        if(!pianoHeldNotes.has(n)){
+          const g=node.vGain.gain;
+          if(g.cancelAndHoldAtTime){g.cancelAndHoldAtTime(t);}
+          else{g.cancelScheduledValues(t);g.setValueAtTime(Math.max(g.value,0.0001),t);}
+          g.exponentialRampToValueAtTime(0.0001,t+0.3);
+          try{node.osc.stop(t+0.31);}catch(e){}
+          toDelete.push(n);
+        }
+      });
+      toDelete.forEach(function(n){activeNodes.delete(n);});
+    }
+    // Normalモードはペダルリリースを無視（3.5s自然減衰）
+    return;
+  }
+  // Analyze/Next/Playモード: 従来通り全音リリース
   activeNodes.forEach(function(node,n){
     const g=node.vGain.gain;
     if(g.cancelAndHoldAtTime){g.cancelAndHoldAtTime(t);}
@@ -2740,6 +2786,19 @@ function initMIDI(){
 initMIDI();
 
 // ===================== INIT =====================
+// iPadでの文字選択防止
+document.addEventListener('selectstart', function(e){
+  var t = e.target;
+  while(t && t !== document.body){
+    if(t.id==='pizza' || t.id==='piano-svg' || t.classList.contains('sg') ||
+       t.classList.contains('nc-tag') || t.classList.contains('pl-chord') ||
+       t.classList.contains('mood-btn') || t.classList.contains('mode-btn')){
+      e.preventDefault(); return;
+    }
+    t = t.parentElement;
+  }
+});
+
 ['touchstart','pointerdown','keydown'].forEach(evt=>{
   document.addEventListener(evt,()=>{
     // Eagerly create and resume AudioContext on first interaction
