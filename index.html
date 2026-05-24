@@ -518,15 +518,19 @@ body.piano-mode #extend-area { display: none !important; }
   <div id="piano-mode-wrap">
     <!-- Controls row: centered, fixed gaps -->
     <div id="piano-controls-row" style="justify-content:center;gap:60px;">
+      <div class="piano-sw-group" id="oct-shift-sw">
+        <button class="piano-sw-btn" id="oct-shift-down" onclick="shiftPianoOctave(-1)">－</button>
+        <span id="oct-shift-label" style="font-size:11px;font-weight:700;color:#aaa;padding:0 8px;line-height:1;display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px">C4</span>
+        <button class="piano-sw-btn" id="oct-shift-up" onclick="shiftPianoOctave(+1)">＋</button>
+      </div>
       <div class="piano-sw-group" id="octave-sw">
         <button class="piano-sw-btn" id="oct-1" onclick="setPianoOctaves(1)">1 oct</button>
         <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">2 oct</button>
         <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">3 oct</button>
       </div>
-      <div class="piano-sw-group" id="oct-shift-sw">
-        <button class="piano-sw-btn" id="oct-shift-down" onclick="shiftPianoOctave(-1)">－</button>
-        <span id="oct-shift-label" style="font-size:11px;font-weight:700;color:#aaa;padding:0 8px;line-height:1;display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px">C4</span>
-        <button class="piano-sw-btn" id="oct-shift-up" onclick="shiftPianoOctave(+1)">＋</button>
+      <div class="piano-sw-group" id="tone-sw">
+        <button class="piano-sw-btn active" id="tone-soft" onclick="setPianoTone('soft')">Soft</button>
+        <button class="piano-sw-btn" id="tone-bright" onclick="setPianoTone('bright')">Bright</button>
       </div>
       <div class="piano-sw-group" id="hold-sw">
         <button class="piano-sw-btn play-active" id="hold-play" onclick="setPianoHold('play')">Play</button>
@@ -806,7 +810,8 @@ function _updateLatency(){
 
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
-  const{osc,vGain}=activeNodes.get(n);
+  const node=activeNodes.get(n);
+  const vGain=node.vGain;
   activeNodes.delete(n);
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
@@ -821,7 +826,8 @@ function stopNote(n,imm){
   }
   const fade=imm?FADE_IMM:0.12;
   g.exponentialRampToValueAtTime(0.0001,t+fade);
-  try{osc.stop(t+fade+0.005);}catch(e){}
+  if(node.oscs){ node.oscs.forEach(function(o){ try{o.stop(t+fade+0.005);}catch(e){} }); }
+  else{ try{node.osc.stop(t+fade+0.005);}catch(e){} }
 }
 function stopAll(imm){[...activeNodes.keys()].forEach(n=>stopNote(n,imm));}
 
@@ -923,7 +929,8 @@ function _playOsc(semitone,nVoices,holdMode){
 // Play モードのリリース: 押鍵中の vGain を 120ms でフェードアウト
 function releaseVoice(n){
   if(!activeNodes.has(n))return;
-  const{osc,vGain}=activeNodes.get(n);
+  const node=activeNodes.get(n);
+  const vGain=node.vGain;
   activeNodes.delete(n);
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
@@ -940,7 +947,8 @@ function releaseVoice(n){
     g.setValueAtTime(Math.max(g.value,0.0001),t);
   }
   g.exponentialRampToValueAtTime(0.0001,t+0.12);
-  try{osc.stop(t+0.13);}catch(e){}
+  if(node.oscs){ node.oscs.forEach(function(o){ try{o.stop(t+0.13);}catch(e){} }); }
+  else{ try{node.osc.stop(t+0.13);}catch(e){} }
 }
 // ---- Voice leading ----
 const VL_LO=48,VL_HI=76,VL_CENTRE=60; // C3-E5, centre C4
@@ -2120,11 +2128,17 @@ var _keydownHandler = function(e){
       pianoReplay();
       return;
     }
-    // Slash: cycle octave 1→2→3→1
-    if(e.code === 'Slash'){
+    // Period(.): cycle octave 1→2→3→1
+    if(e.code === 'Period'){
       e.preventDefault();
       var nextOct = pianoOctaves === 1 ? 2 : pianoOctaves === 2 ? 3 : 1;
       setPianoOctaves(nextOct);
+      return;
+    }
+    // Slash(/): toggle Soft / Bright
+    if(e.code === 'Slash'){
+      e.preventDefault();
+      setPianoTone(pianoTone === 'soft' ? 'bright' : 'soft');
       return;
     }
     // F key: octave shift -1 / J key: octave shift +1 (Piano mode only)
@@ -2138,7 +2152,7 @@ var _keydownHandler = function(e){
       shiftPianoOctave(+1);
       return;
     }
-    // Right Shift: toggle Normal / Play
+    // Right Shift: toggle Play / Hold
     if(e.code === 'ShiftRight'){
       e.preventDefault();
       setPianoHold(pianoPlayMode === 'play' ? 'normal' : 'play');
@@ -2284,6 +2298,81 @@ function setPianoOctaves(n){
   renderPianoKeyboard();
 }
 
+// ===================== PIANO TONE =====================
+var pianoTone = 'soft'; // 'soft' = sine wave | 'bright' = pipe organ (odd harmonics)
+
+function setPianoTone(tone){
+  pianoTone = tone;
+  document.getElementById('tone-soft').classList.toggle('active', tone==='soft');
+  document.getElementById('tone-bright').classList.toggle('active', tone==='bright');
+  pianoClearAll();
+}
+
+// Piano専用発音: Soft=サイン波(既存), Bright=パイプオルガン(奇数倍音)
+function _playOscPiano(semitone, nVoices, holdMode){
+  if(pianoTone === 'soft'){
+    // Soft: 既存の _playOsc をそのまま利用
+    _playOsc(semitone, nVoices, holdMode);
+    return;
+  }
+  // Bright: パイプオルガン系 (奇数倍音: 1・3・5・7・9倍音)
+  const ac = getAC();
+  if(activeNodes.has(semitone)){
+    const old = activeNodes.get(semitone);
+    try{
+      const og = old.vGain.gain;
+      const ot = ac.currentTime + AHEAD;
+      og.cancelScheduledValues(ot);
+      og.setValueAtTime(Math.max(og.value, 0.0001), ot);
+      og.exponentialRampToValueAtTime(0.0001, ot + FADE_IMM);
+      // Bright用: 複数oscを止める
+      if(old.oscs){ old.oscs.forEach(function(o){ try{ o.stop(ot+FADE_IMM+0.002); }catch(e){} }); }
+      else{ try{ old.osc.stop(ot+FADE_IMM+0.002); }catch(e){} }
+    }catch(e){}
+    activeNodes.delete(semitone);
+  }
+  const baseFreq = 442 * Math.pow(2, (semitone - 69) / 12);
+  const level = voiceLevel(nVoices) * loudnessComp(semitone) * 1.6; // Bright: Softより1.6倍大きく
+  const t = ac.currentTime + START_OFFSET;
+  // マスターゲイン
+  const vGain = ac.createGain();
+  const g = vGain.gain;
+  g.setValueAtTime(0.0001, t);
+  g.exponentialRampToValueAtTime(level, t + 0.012);
+  if(holdMode || _sustainOn){
+    // Playモード: 押してる間は音量をほぼ一定に保つ (オルガンらしく減衰しない)
+    g.setValueAtTime(level, t + 0.012);
+    g.linearRampToValueAtTime(level * 0.97, t + 12);
+  } else {
+    // Holdモード: 3.5秒で自然減衰
+    g.setValueAtTime(level, t + 0.012);
+    g.linearRampToValueAtTime(0.0001, t + 3.5);
+  }
+  // フォルマント強調EQ: 1100Hz付近を+8dBブースト → 「通る」存在感を付加
+  var eq = ac.createBiquadFilter();
+  eq.type = 'peaking';
+  eq.frequency.value = 1100;
+  eq.Q.value = 1.2;
+  eq.gain.value = 8;
+  vGain.connect(eq);
+  eq.connect(mixGain);
+  // 奇数倍音: 1・3・5・7・9倍音 (パイプオルガン系)
+  var partials = [[1, 0.55],[3, 0.25],[5, 0.12],[7, 0.05],[9, 0.02]];
+  var oscs = partials.map(function(p){
+    var o = ac.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = baseFreq * p[0];
+    var pg = ac.createGain();
+    pg.gain.value = p[1];
+    o.connect(pg);
+    pg.connect(vGain);
+    o.start(t);
+    o.stop(t + 12.1);
+    return o;
+  });
+  activeNodes.set(semitone, { oscs: oscs, vGain: vGain });
+}
+
 function setPianoHold(mode){
   pianoPlayMode = mode;
   document.getElementById('hold-normal').classList.remove('active','play-active');
@@ -2320,7 +2409,7 @@ function pianoReplay(){
   if(currentMode==='next')updateNextChordPanel();
   var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
   var nv = midiArr.length;
-  midiArr.forEach(function(m){ _playOsc(m, nv, false); });
+  midiArr.forEach(function(m){ _playOscPiano(m, nv, false); });
 }
 
 // ---- SVG Piano Keyboard (pixel-perfect black key positions) ----
@@ -2555,7 +2644,7 @@ function pianoKeyPressNormal(midi){
     // 新しい音だけ追加発音（既存の鳴っている音はキープ）
     pianoSelected.add(midi);
     var nv = pianoSelected.size;
-    _playOsc(midi, nv, false); // false = 3.5s sustain（oct数に無関係）
+    _playOscPiano(midi, nv, false); // false = 3.5s sustain（oct数に無関係）
   }
   renderPianoKeys();
   updatePianoResult();
@@ -2571,7 +2660,7 @@ function pianoKeyPressPlayDown(midi){
   pianoHeldNotes.add(midi);
   pianoSelected.add(midi);
   var nv = pianoHeldNotes.size;
-  _playOsc(midi, nv, true); // true = hold (play-mode sustain)
+  _playOscPiano(midi, nv, true); // true = hold (play-mode sustain)
   renderPianoKeys();
   updatePianoResult();
 }
@@ -2738,7 +2827,7 @@ function _sustainRelease(){
           if(g.cancelAndHoldAtTime){g.cancelAndHoldAtTime(t);}
           else{g.cancelScheduledValues(t);g.setValueAtTime(Math.max(g.value,0.0001),t);}
           g.exponentialRampToValueAtTime(0.0001,t+0.3);
-          try{node.osc.stop(t+0.31);}catch(e){}
+          if(node.oscs){node.oscs.forEach(function(o){try{o.stop(t+0.31);}catch(e){}});}else{try{node.osc.stop(t+0.31);}catch(e){}}
           toDelete.push(n);
         }
       });
@@ -2755,7 +2844,7 @@ function _sustainRelease(){
     if(g.cancelAndHoldAtTime){g.cancelAndHoldAtTime(t);}
     else{g.cancelScheduledValues(t);g.setValueAtTime(Math.max(g.value,0.0001),t);}
     g.exponentialRampToValueAtTime(0.0001,t+0.15);
-    try{node.osc.stop(t+0.16);}catch(e){}
+    if(node.oscs){node.oscs.forEach(function(o){try{o.stop(t+0.16);}catch(e){}});}else{try{node.osc.stop(t+0.16);}catch(e){}}
   });
   activeNodes.clear();
 }
