@@ -418,6 +418,8 @@ body.piano-mode #extend-area { display: none !important; }
   letter-spacing: .3px;
   transition: background .15s, color .15s;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 /* :active のみ (全デバイス共通) */
 .piano-action-btn:active {
@@ -465,6 +467,33 @@ body.piano-mode #extend-area { display: none !important; }
   background: #4A90D9;
   color: #fff;
   border-radius: 14px;
+}
+.piano-sw-btn:active {
+  background: #505058;
+  color: #fff;
+}
+/* トランスポーズラベル: 通常=グレー、ずれてる時=青ハイライト */
+#oct-shift-label {
+  font-size:11px;font-weight:700;color:#666;
+  padding:0 4px;line-height:1;
+  display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px;
+  width:58px;justify-content:center;
+  transition:color .15s;
+  cursor:pointer;
+}
+#oct-shift-label.active {
+  background:#4A90D9;color:#fff;border-radius:10px;
+}
+#transpose-label {
+  font-size:11px;font-weight:700;color:#666;
+  padding:0 4px;line-height:1;
+  display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px;
+  width:68px;justify-content:center;
+  transition:background .15s,color .15s,border-radius .15s;
+  cursor:pointer;
+}
+#transpose-label.active {
+  background:#4A90D9;color:#fff;border-radius:10px;
 }
 </style>
 </head>
@@ -517,16 +546,21 @@ body.piano-mode #extend-area { display: none !important; }
   <!-- ===================== PIANO MODE UI ===================== -->
   <div id="piano-mode-wrap">
     <!-- Controls row: centered, fixed gaps -->
-    <div id="piano-controls-row" style="justify-content:center;gap:60px;">
+    <div id="piano-controls-row" style="justify-content:center;gap:30px;">
       <div class="piano-sw-group" id="oct-shift-sw">
         <button class="piano-sw-btn" id="oct-shift-down" onclick="shiftPianoOctave(-1)">－</button>
-        <span id="oct-shift-label" style="font-size:11px;font-weight:700;color:#aaa;padding:0 8px;line-height:1;display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px">C4</span>
+        <span id="oct-shift-label" onclick="resetOctShift()" title="クリックでC4に戻す">Octave</span>
         <button class="piano-sw-btn" id="oct-shift-up" onclick="shiftPianoOctave(+1)">＋</button>
       </div>
+      <div class="piano-sw-group" id="transpose-sw">
+        <button class="piano-sw-btn" id="transpose-down" onclick="shiftTranspose(-1)">－</button>
+        <span id="transpose-label" onclick="resetTranspose()" title="クリックで0stにリセット">Semitone</span>
+        <button class="piano-sw-btn" id="transpose-up" onclick="shiftTranspose(+1)">＋</button>
+      </div>
       <div class="piano-sw-group" id="octave-sw">
-        <button class="piano-sw-btn" id="oct-1" onclick="setPianoOctaves(1)">1 oct</button>
-        <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">2 oct</button>
-        <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">3 oct</button>
+        <button class="piano-sw-btn" id="oct-1" onclick="setPianoOctaves(1)">Small</button>
+        <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">Medium</button>
+        <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">Large</button>
       </div>
       <div class="piano-sw-group" id="tone-sw">
         <button class="piano-sw-btn active" id="tone-soft" onclick="setPianoTone('soft')">Soft</button>
@@ -1932,11 +1966,13 @@ function setMode(mode){
   document.body.classList.toggle('play-mode',mode==='play');
   document.body.classList.toggle('next-mode',mode==='next');
   document.body.classList.toggle('piano-mode',mode==='piano');
-  if(mode==='piano'){renderPianoKeyboard();_updateOctShiftUI();}
+  if(mode==='piano'){renderPianoKeyboard();_updateOctShiftUI();_updateTransposeUI();}
   // Piano専用オクターブシフトをリセット（pianoモード以外に切り替わったとき）
   if(mode!=='piano'){
     pianoOctaveShift=0;
     _updateOctShiftUI();
+    pianoTranspose=0;
+    _updateTransposeUI();
   }
   // モード切り替え時はすべてリセット
   stopAll(true);
@@ -2152,6 +2188,28 @@ var _keydownHandler = function(e){
       shiftPianoOctave(+1);
       return;
     }
+    // D key: transpose -1st / K key: transpose +1st (Piano mode only)
+    if(e.code === 'KeyD'){
+      e.preventDefault();
+      shiftTranspose(-1);
+      return;
+    }
+    if(e.code === 'KeyK'){
+      e.preventDefault();
+      shiftTranspose(+1);
+      return;
+    }
+    // Semicolon(;): transpose -1st / Quote('): transpose +1st (Piano mode only)
+    if(e.code === 'Semicolon'){
+      e.preventDefault();
+      shiftTranspose(-1);
+      return;
+    }
+    if(e.code === 'Quote'){
+      e.preventDefault();
+      shiftTranspose(+1);
+      return;
+    }
     // Right Shift: toggle Play / Hold
     if(e.code === 'ShiftRight'){
       e.preventDefault();
@@ -2261,7 +2319,7 @@ var PIANO_SHIFT_MIN = -3; // C4→C1 (MIDI 36)
 var PIANO_SHIFT_MAX = 3;  // C4→C7 (MIDI 96)
 
 function getPianoStartMidi(){
-  return 60 + pianoOctaveShift * 12;
+  return 60 + pianoOctaveShift * 12; // トランスポーズはここに含めない
 }
 
 function _octShiftLabel(){
@@ -2275,7 +2333,11 @@ function _updateOctShiftUI(){
   var lbl = document.getElementById('oct-shift-label');
   var btnD = document.getElementById('oct-shift-down');
   var btnU = document.getElementById('oct-shift-up');
-  if(lbl) lbl.textContent = _octShiftLabel();
+  if(lbl){
+    var s = pianoOctaveShift;
+    lbl.textContent = s === 0 ? 'Octave' : (s > 0 ? '+' + s + 'oct' : s + 'oct');
+    lbl.classList.toggle('active', s !== 0);
+  }
   if(btnD) btnD.style.opacity = pianoOctaveShift <= PIANO_SHIFT_MIN ? '0.3' : '1';
   if(btnU) btnU.style.opacity = pianoOctaveShift >= PIANO_SHIFT_MAX ? '0.3' : '1';
 }
@@ -2287,6 +2349,46 @@ function shiftPianoOctave(delta){
   pianoClearAll();
   _updateOctShiftUI();
   renderPianoKeyboard();
+}
+
+function resetOctShift(){
+  if(pianoOctaveShift === 0) return;
+  pianoOctaveShift = 0;
+  pianoClearAll();
+  _updateOctShiftUI();
+  renderPianoKeyboard();
+}
+
+// ===================== PIANO TRANSPOSE =====================
+var pianoTranspose = 0; // 半音単位 -12〜+12
+var TRANSPOSE_MIN = -12;
+var TRANSPOSE_MAX = 12;
+
+function _updateTransposeUI(){
+  var lbl = document.getElementById('transpose-label');
+  var btnD = document.getElementById('transpose-down');
+  var btnU = document.getElementById('transpose-up');
+  if(!lbl) return;
+  var v = pianoTranspose;
+  lbl.textContent = v === 0 ? 'Semitone' : (v > 0 ? '+' + v + 'st' : v + 'st');
+  lbl.classList.toggle('active', v !== 0);
+  if(btnD) btnD.style.opacity = v <= TRANSPOSE_MIN ? '0.3' : '1';
+  if(btnU) btnU.style.opacity = v >= TRANSPOSE_MAX ? '0.3' : '1';
+}
+
+function shiftTranspose(delta){
+  var next = pianoTranspose + delta;
+  if(next < TRANSPOSE_MIN || next > TRANSPOSE_MAX) return;
+  pianoTranspose = next;
+  pianoClearAll();
+  _updateTransposeUI();
+}
+
+function resetTranspose(){
+  if(pianoTranspose === 0) return;
+  pianoTranspose = 0;
+  pianoClearAll();
+  _updateTransposeUI();
 }
 
 function setPianoOctaves(n){
@@ -2310,9 +2412,50 @@ function setPianoTone(tone){
 
 // Piano専用発音: Soft=サイン波(既存), Bright=パイプオルガン(奇数倍音)
 function _playOscPiano(semitone, nVoices, holdMode){
+  // トランスポーズ: activeNodesは元のmidi番号で管理、周波数計算時だけずらす
+  // +1 = 半音上、-1 = 半音下
+  var transposedSemitone = semitone + pianoTranspose;
   if(pianoTone === 'soft'){
-    // Soft: 既存の _playOsc をそのまま利用
-    _playOsc(semitone, nVoices, holdMode);
+    // Soft: _playOsc をトランスポーズ済み周波数で呼ぶが、
+    // activeNodesキーを元のsemitoneにするため直接実装
+    const ac = getAC();
+    if(activeNodes.has(semitone)){
+      const old = activeNodes.get(semitone);
+      try{
+        const og = old.vGain.gain;
+        const ot = ac.currentTime + AHEAD;
+        og.cancelScheduledValues(ot);
+        og.setValueAtTime(Math.max(og.value,0.0001),ot);
+        og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
+        if(old.oscs){old.oscs.forEach(function(o){try{o.stop(ot+FADE_IMM+0.002);}catch(e){}});}
+        else{try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
+      }catch(e){}
+      activeNodes.delete(semitone);
+    }
+    const freq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
+    const level = voiceLevel(nVoices) * loudnessComp(transposedSemitone);
+    const t = ac.currentTime + START_OFFSET;
+    const osc = ac.createOscillator();
+    const vGain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const g = vGain.gain;
+    g.setValueAtTime(0.0001, t);
+    g.exponentialRampToValueAtTime(level, t + 0.012);
+    if(holdMode || _sustainOn){
+      g.setValueAtTime(level, t + 0.012);
+      g.linearRampToValueAtTime(level * 0.85, t + 0.4);
+      g.linearRampToValueAtTime(level * 0.65, t + 1.5);
+      g.linearRampToValueAtTime(0.0001, t + 12);
+    } else {
+      g.setValueAtTime(level, t + 0.012);
+      g.linearRampToValueAtTime(0.0001, t + 3.5);
+    }
+    osc.connect(vGain);
+    vGain.connect(mixGain);
+    osc.start(t);
+    osc.stop(t + 12.1);
+    activeNodes.set(semitone, {osc, vGain}); // 元のsemitoneをキーに
     return;
   }
   // Bright: パイプオルガン系 (奇数倍音: 1・3・5・7・9倍音)
@@ -2331,7 +2474,7 @@ function _playOscPiano(semitone, nVoices, holdMode){
     }catch(e){}
     activeNodes.delete(semitone);
   }
-  const baseFreq = 442 * Math.pow(2, (semitone - 69) / 12);
+  const baseFreq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
   const level = voiceLevel(nVoices) * loudnessComp(semitone) * 1.6; // Bright: Softより1.6倍大きく
   const t = ac.currentTime + START_OFFSET;
   // マスターゲイン
@@ -2370,7 +2513,7 @@ function _playOscPiano(semitone, nVoices, holdMode){
     o.stop(t + 12.1);
     return o;
   });
-  activeNodes.set(semitone, { oscs: oscs, vGain: vGain });
+  activeNodes.set(semitone, { oscs: oscs, vGain: vGain }); // 元のsemitoneをキーに
 }
 
 function setPianoHold(mode){
@@ -2712,7 +2855,8 @@ function updatePianoResult(){
   // Single note
   if(pcs.length === 1){
     var flat = currentKey.flat;
-    var nm = noteName(pcs[0], flat);
+    var pcT = ((pcs[0] + pianoTranspose) % 12 + 12) % 12;
+    var nm = noteName(pcT, flat);
     var div = document.createElement('div');
     div.className = 'result-block';
     div.innerHTML = '<div class="rb-chord">' + nm + '</div>'
@@ -2722,25 +2866,29 @@ function updatePianoResult(){
     return;
   }
 
-  var hits = detect(pcs);
+  // トランスポーズ補正: 鍵盤pc + pianoTranspose = 実際に鳴っている音のpc
+  var pcsForDetect = pcs.map(function(p){ return ((p + pianoTranspose) % 12 + 12) % 12; });
+  // inversion検出・音名表示用: 実MIDIノートからトランスポーズを引いた値
+  var midiArrT = midiArr.map(function(m){ return m + pianoTranspose; });
+  var hits = detect(pcsForDetect);
 
   if(hits.length === 0){
     // No chord matched — show ? card + possible chords hint (3 notes only)
     var div = document.createElement('div');
     div.className = 'result-block';
-    var noteNames = pcs.map(function(p){return noteName(p, currentKey.flat);}).join(' + ');
+    var noteNames = pcsForDetect.map(function(p){return noteName(p, currentKey.flat);}).join(' + ');
     div.innerHTML = '<div class="rb-chord">?</div>'
       + '<div class="rb-notes">' + noteNames + '</div>'
       + '<div class="rb-ivs">' + pcs.length + ' notes — unidentified</div>';
     area.appendChild(div);
-    if(possEl && pcs.length === 3){
-      possEl.innerHTML = pianoPossibleChords(pcs);
+    if(possEl && pcsForDetect.length === 3){
+      possEl.innerHTML = pianoPossibleChords(pcsForDetect);
     }
     return;
   }
 
   // --- Chord identified: render up to 3 result-block cards (same as Analyze mode) ---
-  var bassPc = midiArr[0] % 12; // lowest midi note = bass
+  var bassPc = ((midiArr[0] % 12 + pianoTranspose) % 12 + 12) % 12; // lowest midi note = bass (transpose補正済み)
 
   // Determine inversion for the first (primary) card
   var inversionHit = '';
@@ -2752,10 +2900,10 @@ function updatePianoResult(){
   if(!rootPosHit){
     // All results are inversions of this chord; primary = hits[0], detect inversion
     rootPosHit = hits[0];
-    inversionHit = detectInversion(midiArr, rootPosHit.root) || '';
+    inversionHit = detectInversion(midiArrT, rootPosHit.root) || '';
   } else {
     // Root matches bass — double-check (sometimes bass == root but voicing flipped)
-    var maybeInv = detectInversion(midiArr, rootPosHit.root);
+    var maybeInv = detectInversion(midiArrT, rootPosHit.root);
     inversionHit = maybeInv || '';
   }
 
@@ -2769,7 +2917,7 @@ function updatePianoResult(){
     var flat = useFlat(h.root, h.s);
     var chName = fmtRoot(h.root, h.s, flat);
     var chDisp = chName.replace(/ \| /g, '<span style="font-weight:300;color:#555"> | </span>');
-    var noteStr = buildNoteIvStr(pcs, h.root, flat, h.s);
+    var noteStr = buildNoteIvStr(pcsForDetect, h.root, flat, h.s);
     var invBadge = (idx === 0 && inversionHit)
       ? '<span class="rb-inversion">' + inversionHit + '</span>' : '';
     var div = document.createElement('div');
@@ -3042,9 +3190,13 @@ initMIDI();
 document.addEventListener('selectstart', function(e){
   var t = e.target;
   while(t && t !== document.body){
-    if(t.id==='pizza' || t.id==='piano-svg' || t.classList.contains('sg') ||
-       t.classList.contains('nc-tag') || t.classList.contains('pl-chord') ||
-       t.classList.contains('mood-btn') || t.classList.contains('mode-btn')){
+    if(t.id==='pizza' || t.id==='piano-svg') { e.preventDefault(); return; }
+    // SVG rect等 classList が undefined の要素はスキップ
+    if(t.classList && (
+       t.classList.contains('sg') || t.classList.contains('nc-tag') ||
+       t.classList.contains('pl-chord') || t.classList.contains('mood-btn') ||
+       t.classList.contains('mode-btn') || t.classList.contains('piano-sw-btn') ||
+       t.classList.contains('piano-action-btn'))){
       e.preventDefault(); return;
     }
     t = t.parentElement;
