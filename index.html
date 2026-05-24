@@ -3266,6 +3266,17 @@ document.addEventListener('selectstart', function(e){
   },{once:false,passive:true});
 });
 
+// iOS PWA: 他アプリから戻った時に AudioContext を自動 resume
+// visibilitychange で「画面が見える状態に戻った」を検出する
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'){
+    if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
+    if(actx.state==='suspended'){
+      actx.resume().catch(()=>{});
+    }
+  }
+});
+
 // Wrap in DOMContentLoaded for Android Chrome compatibility
 function init(){
   // requestAnimationFrame ensures the DOM is fully painted before we
