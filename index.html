@@ -331,7 +331,7 @@ body.piano-mode #extend-area { display: none !important; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 40px;
   gap: 6px;
 }
 
@@ -516,18 +516,21 @@ body.piano-mode #extend-area { display: none !important; }
 
   <!-- ===================== PIANO MODE UI ===================== -->
   <div id="piano-mode-wrap">
-    <!-- Controls row: octave switch LEFT | hold switch RIGHT -->
-    <div id="piano-controls-row">
+    <!-- Controls row: centered, fixed gaps -->
+    <div id="piano-controls-row" style="justify-content:center;gap:60px;">
       <div class="piano-sw-group" id="octave-sw">
         <button class="piano-sw-btn" id="oct-1" onclick="setPianoOctaves(1)">1 oct</button>
         <button class="piano-sw-btn active" id="oct-2" onclick="setPianoOctaves(2)">2 oct</button>
         <button class="piano-sw-btn" id="oct-3" onclick="setPianoOctaves(3)">3 oct</button>
       </div>
-      <!-- spacer -->
-      <div style="flex:1"></div>
+      <div class="piano-sw-group" id="oct-shift-sw">
+        <button class="piano-sw-btn" id="oct-shift-down" onclick="shiftPianoOctave(-1)">－</button>
+        <span id="oct-shift-label" style="font-size:11px;font-weight:700;color:#aaa;padding:0 8px;line-height:1;display:flex;align-items:center;white-space:nowrap;letter-spacing:.3px">C4</span>
+        <button class="piano-sw-btn" id="oct-shift-up" onclick="shiftPianoOctave(+1)">＋</button>
+      </div>
       <div class="piano-sw-group" id="hold-sw">
-        <button class="piano-sw-btn active" id="hold-normal" onclick="setPianoHold('normal')">Normal</button>
-        <button class="piano-sw-btn" id="hold-play" onclick="setPianoHold('play')">Play</button>
+        <button class="piano-sw-btn play-active" id="hold-play" onclick="setPianoHold('play')">Play</button>
+        <button class="piano-sw-btn" id="hold-normal" onclick="setPianoHold('normal')">Hold</button>
       </div>
     </div>
     <!-- 固定高さゾーン: カード+候補タグ。overflow:hidden で鍵盤位置を固定 -->
@@ -1921,7 +1924,12 @@ function setMode(mode){
   document.body.classList.toggle('play-mode',mode==='play');
   document.body.classList.toggle('next-mode',mode==='next');
   document.body.classList.toggle('piano-mode',mode==='piano');
-  if(mode==='piano'){renderPianoKeyboard();}
+  if(mode==='piano'){renderPianoKeyboard();_updateOctShiftUI();}
+  // Piano専用オクターブシフトをリセット（pianoモード以外に切り替わったとき）
+  if(mode!=='piano'){
+    pianoOctaveShift=0;
+    _updateOctShiftUI();
+  }
   // モード切り替え時はすべてリセット
   stopAll(true);
   selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
@@ -2119,10 +2127,21 @@ var _keydownHandler = function(e){
       setPianoOctaves(nextOct);
       return;
     }
+    // F key: octave shift -1 / J key: octave shift +1 (Piano mode only)
+    if(e.code === 'KeyF'){
+      e.preventDefault();
+      shiftPianoOctave(-1);
+      return;
+    }
+    if(e.code === 'KeyJ'){
+      e.preventDefault();
+      shiftPianoOctave(+1);
+      return;
+    }
     // Right Shift: toggle Normal / Play
     if(e.code === 'ShiftRight'){
       e.preventDefault();
-      setPianoHold(pianoPlayMode === 'normal' ? 'play' : 'normal');
+      setPianoHold(pianoPlayMode === 'play' ? 'normal' : 'play');
       return;
     }
     // Note keys (piano mode) — use KEY_MAP_PC
@@ -2216,12 +2235,45 @@ document.addEventListener('keyup',   _keyupHandler,   true);
 })();
 // ===================== PIANO MODE =====================
 var pianoOctaves = 2;
-var pianoPlayMode = 'normal';
+var pianoPlayMode = 'play';
 var pianoSelected = new Set(); // absolute MIDI notes
 // For Play mode: track which midi notes are currently held (pointerdown active)
 var pianoHeldNotes = new Set();
 
-function getPianoStartMidi(){ return pianoOctaves===3 ? 60 : 60; }
+// Piano専用オクターブシフト (0 = C4基点)
+// 88鍵ピアノ音域: A0(MIDI21)〜C8(MIDI108) に合わせて -3〜+3 oct
+var pianoOctaveShift = 0;
+var PIANO_SHIFT_MIN = -3; // C4→C1 (MIDI 36)
+var PIANO_SHIFT_MAX = 3;  // C4→C7 (MIDI 96)
+
+function getPianoStartMidi(){
+  return 60 + pianoOctaveShift * 12;
+}
+
+function _octShiftLabel(){
+  // 基音のノート名を返す (C4, C5, C3 …)
+  var midi = getPianoStartMidi();
+  var octNum = Math.floor(midi / 12) - 1; // MIDI 60 = C4
+  return 'C' + octNum;
+}
+
+function _updateOctShiftUI(){
+  var lbl = document.getElementById('oct-shift-label');
+  var btnD = document.getElementById('oct-shift-down');
+  var btnU = document.getElementById('oct-shift-up');
+  if(lbl) lbl.textContent = _octShiftLabel();
+  if(btnD) btnD.style.opacity = pianoOctaveShift <= PIANO_SHIFT_MIN ? '0.3' : '1';
+  if(btnU) btnU.style.opacity = pianoOctaveShift >= PIANO_SHIFT_MAX ? '0.3' : '1';
+}
+
+function shiftPianoOctave(delta){
+  var next = pianoOctaveShift + delta;
+  if(next < PIANO_SHIFT_MIN || next > PIANO_SHIFT_MAX) return;
+  pianoOctaveShift = next;
+  pianoClearAll();
+  _updateOctShiftUI();
+  renderPianoKeyboard();
+}
 
 function setPianoOctaves(n){
   pianoOctaves = n;
@@ -2528,7 +2580,12 @@ function pianoKeyPressPlayUp(midi){
   if(!pianoHeldNotes.has(midi)) return;
   pianoHeldNotes.delete(midi);
   pianoSelected.delete(midi);
-  if(activeNodes.has(midi)) releaseVoice(midi);
+  if(_sustainOn){
+    // サスティンペダル中: 鍵盤を離しても音はキープ
+    // activeNodes はそのまま保持 → ペダルを離した時に _sustainRelease() でまとめてリリース
+  } else {
+    if(activeNodes.has(midi)) releaseVoice(midi);
+  }
   renderPianoKeys();
   updatePianoResult();
 }
@@ -2671,8 +2728,9 @@ function _sustainRelease(){
   if(!actx)return;
   const t=actx.currentTime+AHEAD;
   if(currentMode==='piano'){
-    // Pianoモード: Playモード中はheld以外をリリース、Normalモードは自然減衰に任せる
     if(pianoPlayMode==='play'){
+      // ペダルを離した: 鍵盤もすでに離している音（pianoHeldNodesにない）をリリース
+      // 本物ピアノと同様、まだ押さえている鍵盤の音はそのまま継続
       var toDelete=[];
       activeNodes.forEach(function(node,n){
         if(!pianoHeldNotes.has(n)){
@@ -2685,8 +2743,10 @@ function _sustainRelease(){
         }
       });
       toDelete.forEach(function(n){activeNodes.delete(n);});
+      renderPianoKeys();
+      updatePianoResult();
     }
-    // Normalモードはペダルリリースを無視（3.5s自然減衰）
+    // Holdモードはペダルリリースを無視（3.5s自然減衰）
     return;
   }
   // Analyze/Next/Playモード: 従来通り全音リリース
@@ -2822,6 +2882,12 @@ function initMIDI(){
     if(_tryNcTag(el)){e.preventDefault();return;}
     if(_tryLogItem(el)){e.preventDefault();return;}
   },{passive:false});
+
+  // マウスクリック用 (非タッチデバイス対応)
+  document.addEventListener('click',function(e){
+    if(_tryNcTag(e.target))return;
+    if(_tryLogItem(e.target))return;
+  });
 
   // --- nc-tag: 自身または祖先を探す ---
   function _findAncestor(el,cls,stopId){
