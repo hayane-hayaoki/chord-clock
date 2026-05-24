@@ -69,6 +69,28 @@ html,body{
 @media(min-width:768px) and (pointer:coarse){
   #svg-wrap{max-width:min(96vw, 82vmin);}
 }
+/* iPad PWA: 縦画面 */
+body.ipad-pwa.portrait #svg-wrap{
+  max-width:min(98vw, 58vh);
+}
+/* iPad PWA: 横画面 */
+body.ipad-pwa.landscape #svg-wrap{
+  max-width:min(54vw, 90vh);
+}
+/* iPad PWA: Next mode 横画面時の左カラム幅調整 */
+body.ipad-pwa.landscape.next-mode #next-left-col{
+  width:min(56vw, 50vmin);
+}
+/* iPad PWA: Piano mode 横幅フル */
+body.ipad-pwa #piano-mode-wrap{
+  max-width:100vw;
+}
+body.ipad-pwa #piano-keyboard-wrap,
+body.ipad-pwa #piano-controls-row,
+body.ipad-pwa #piano-info-zone,
+body.ipad-pwa #piano-action-row{
+  max-width:100%;
+}
 #pizza{width:100%;height:auto;display:block}
 #results-area{
   width:100%;padding:4px 10px;
@@ -347,6 +369,9 @@ body.piano-mode #extend-area { display: none !important; }
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 /* コードカード行 */
 #piano-result-display {
@@ -631,6 +656,28 @@ body.piano-mode #extend-area { display: none !important; }
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
   }catch(e){}
+})();
+
+// ===================== iPad PWA 検出 =====================
+(function(){
+  // standalone = PWAとしてホーム画面から起動
+  // maxTouchPoints > 1 = タッチデバイス（iPad/iPhone）
+  var isStandalone = navigator.standalone === true;
+  var isTouch = navigator.maxTouchPoints > 1;
+  if(isStandalone && isTouch){
+    document.body.classList.add('ipad-pwa');
+  }
+  // 縦横を body クラスで管理
+  function updateOrientation(){
+    var isLandscape = window.innerWidth > window.innerHeight;
+    document.body.classList.toggle('landscape', isLandscape);
+    document.body.classList.toggle('portrait', !isLandscape);
+  }
+  updateOrientation();
+  window.addEventListener('resize', updateOrientation);
+  window.addEventListener('orientationchange', function(){
+    setTimeout(updateOrientation, 100); // orientationchange後にinnerWidth/Hが確定するのを待つ
+  });
 })();
 
 // ===================== KEY SIGNATURES =====================
