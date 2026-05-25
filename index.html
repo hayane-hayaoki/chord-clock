@@ -658,7 +658,7 @@ body.piano-mode #extend-area { display: none !important; }
   // Only register if we have a real URL (not blob/file)
   try{
     if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v12';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
+      const swCode=`const C='cc-v13';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
       const b=new Blob([swCode],{type:'application/javascript'});
       navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
     }
@@ -898,9 +898,16 @@ function _updateLatency(){
 
 function stopNote(n,imm){
   if(!activeNodes.has(n))return;
+  if(!actx)return; // AudioContext未初期化ガード
   const node=activeNodes.get(n);
   const vGain=node.vGain;
   activeNodes.delete(n);
+  // suspended/interrupted 時は currentTime が止まっているため即時停止
+  if(actx.state==='suspended'||actx.state==='interrupted'){
+    if(node.oscs){node.oscs.forEach(function(o){try{o.stop();}catch(e){}});}
+    else{try{node.osc.stop();}catch(e){}}
+    return;
+  }
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
   if(g.cancelAndHoldAtTime){
@@ -932,7 +939,8 @@ let _volBeforeMute=0.70;
 function _applyVolume(){
   if(!limiter)return;
   const v=_isMuted?0:_volValue;
-  limiter.gain.setTargetAtTime(v,actx?actx.currentTime:0,0.02);
+  // actx が null / suspended でも currentTime=0 を渡して安全に動作させる
+  limiter.gain.setTargetAtTime(v, actx?.currentTime ?? 0, 0.02);
 }
 function setVolume(pct){
   _volValue=Number(pct)/100;
@@ -970,6 +978,12 @@ document.addEventListener('DOMContentLoaded',function(){
 
 function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
+  // スリープ復帰直後など、AudioContext が suspended/interrupted の場合は
+  // resume() 完了を待ってから再度呼び出す（過去時刻スケジュール防止）
+  if(ac.state==='suspended'||ac.state==='interrupted'){
+    ac.resume().then(()=>_playOsc(semitone,nVoices,holdMode)).catch(()=>{});
+    return;
+  }
   // 同じsemitoneが既に鳴っている場合は先に即時停止（二重登録防止）
   if(activeNodes.has(semitone)){
     const old=activeNodes.get(semitone);
@@ -1017,9 +1031,16 @@ function _playOsc(semitone,nVoices,holdMode){
 // Play モードのリリース: 押鍵中の vGain を 120ms でフェードアウト
 function releaseVoice(n){
   if(!activeNodes.has(n))return;
+  if(!actx)return; // AudioContext未初期化ガード
   const node=activeNodes.get(n);
   const vGain=node.vGain;
   activeNodes.delete(n);
+  // suspended/interrupted 時は currentTime=0 のままなので即座にoscだけ止める
+  if(actx.state==='suspended'||actx.state==='interrupted'){
+    if(node.oscs){node.oscs.forEach(function(o){try{o.stop();}catch(e){}});}
+    else{try{node.osc.stop();}catch(e){}}
+    return;
+  }
   const t=actx.currentTime+AHEAD;
   const g=vGain.gain;
   // cancelAndHoldAtTime が使えるブラウザではそれだけ使う（Chrome/Safari）
@@ -1128,7 +1149,8 @@ function renderProgLog(){
         br.style.cssText='width:100%;height:0;flex-basis:100%;';
         target.appendChild(br);
       }
-      if(i>0&&i!==ROW_SIZE&&i!==ROW_SIZE+1){
+      // 矢印: 先頭(i===0)と2行目先頭(i===ROW_SIZE)の直後はスキップ
+      if(i>0&&i!==ROW_SIZE){
         var arr=document.createElement('span');arr.className='pl-arrow';arr.textContent='>';target.appendChild(arr);
       }
       var span=document.createElement('span');
@@ -2029,10 +2051,11 @@ function setMode(mode){
     _updateTransposeUI();
   }
   // モード切り替え時はすべてリセット
+  // stopAll(true) が activeNodes を全消去するので、その後 playActive で
+  // stopNote を再度呼んでも空振りになる。先に playActive をクリアしてから stopAll。
+  playActive.clear();
   stopAll(true);
   selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
-  playActive.forEach(function(_,n){stopNote(n,true);});
-  playActive.clear();
   // Piano mode selections も解除
   if(typeof pianoSelected!=='undefined'){pianoSelected.clear();}
   if(typeof pianoHeldNotes!=='undefined'){pianoHeldNotes.clear();}
@@ -2466,6 +2489,14 @@ function setPianoTone(tone){
 
 // Piano専用発音: Soft=サイン波(既存), Bright=パイプオルガン(奇数倍音)
 function _playOscPiano(semitone, nVoices, holdMode){
+  // スリープ復帰直後など、AudioContext が suspended/interrupted の場合は
+  // resume() 完了を待ってから再度呼び出す（_playOsc と同様の対策）
+  // nVoices/holdMode はこの呼び出し時点の値をクロージャで保持するため正確
+  const ac0=getAC();
+  if(ac0.state==='suspended'||ac0.state==='interrupted'){
+    ac0.resume().then(()=>_playOscPiano(semitone,nVoices,holdMode)).catch(()=>{});
+    return;
+  }
   // トランスポーズ: activeNodesは元のmidi番号で管理、周波数計算時だけずらす
   // +1 = 半音上、-1 = 半音下
   var transposedSemitone = semitone + pianoTranspose;
@@ -2710,9 +2741,16 @@ function pianoReplay(){
 //
 // These are the values used in GarageBand / Logic / most DAW piano roll UIs.
 
+var _pianoKbController = null; // AbortController for piano keyboard event listeners
+
 function renderPianoKeyboard(){
   var svgEl = document.getElementById('piano-svg');
   if(!svgEl) return;
+
+  // 前回のイベントリスナーを一括解除（メモリ蓄積防止）
+  if(_pianoKbController) _pianoKbController.abort();
+  _pianoKbController = new AbortController();
+  var sig = _pianoKbController.signal;
 
   var startMidi = getPianoStartMidi();
   var nOct = pianoOctaves;
@@ -2776,13 +2814,13 @@ function renderPianoKeyboard(){
           } else {
             pianoKeyPressPlayDown(m);
           }
-        }, {passive:false});
+        }, {passive:false, signal:sig});
         rect.addEventListener('pointerup', function(e){
           if(pianoPlayMode === 'play') pianoKeyPressPlayUp(m);
-        });
+        }, {signal:sig});
         rect.addEventListener('pointerleave', function(e){
           if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
-        });
+        }, {signal:sig});
       })(midi);
       svgEl.appendChild(rect);
     }
@@ -2816,14 +2854,14 @@ function renderPianoKeyboard(){
           } else {
             pianoKeyPressPlayDown(m);
           }
-        }, {passive:false});
+        }, {passive:false, signal:sig});
         rect.addEventListener('pointerup', function(e){
           e.stopPropagation();
           if(pianoPlayMode === 'play') pianoKeyPressPlayUp(m);
-        });
+        }, {signal:sig});
         rect.addEventListener('pointerleave', function(e){
           if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
-        });
+        }, {signal:sig});
       })(midi);
       svgEl.appendChild(rect);
     }
@@ -2850,12 +2888,15 @@ function pianoKeyPressNormal(midi){
 // Play mode: pointerdown = start note (hold), pointerup = release note
 function pianoKeyPressPlayDown(midi){
   if(pianoHeldNotes.has(midi)) return; // already held
-  // 同じmidiが既にactiveNodesにある場合は明示的にクリーン（_playOsc内でも処理するが念のため）
+  // 同じmidiが既にactiveNodesにある場合は明示的にクリーン
   if(activeNodes.has(midi)){
     releaseVoice(midi); // 古いoscを確実に止める
   }
   pianoHeldNotes.add(midi);
   pianoSelected.add(midi);
+  // nv をここで確定させてクロージャに閉じ込める。
+  // _playOscPiano がサスペンド復帰時に then() で再帰する際も
+  // この時点のボイス数を使うため音量バランスがずれない。
   var nv = pianoHeldNotes.size;
   _playOscPiano(midi, nv, true); // true = hold (play-mode sustain)
   renderPianoKeys();
@@ -2865,11 +2906,12 @@ function pianoKeyPressPlayDown(midi){
 function pianoKeyPressPlayUp(midi){
   if(!pianoHeldNotes.has(midi)) return;
   pianoHeldNotes.delete(midi);
-  pianoSelected.delete(midi);
   if(_sustainOn){
-    // サスティンペダル中: 鍵盤を離しても音はキープ
-    // activeNodes はそのまま保持 → ペダルを離した時に _sustainRelease() でまとめてリリース
+    // サスティンペダル中: 鍵盤を離しても音・ハイライトともキープ
+    // pianoSelected はそのまま保持 → 鍵盤ハイライトが消えない
+    // activeNodes もそのまま → ペダルを離した時に _sustainRelease() でまとめてリリース
   } else {
+    pianoSelected.delete(midi);
     if(activeNodes.has(midi)) releaseVoice(midi);
   }
   renderPianoKeys();
@@ -3017,10 +3059,17 @@ function pianoPossibleChords(pcs){
 var _sustainOn=false;
 function _sustainRelease(){
   if(!actx)return;
+  // suspended/interrupted 時は currentTime=0 のまま → cancelAndHoldAtTime に
+  // 過去時刻を渡してしまうため、resume後に改めて処理するか即停止する
+  if(actx.state==='suspended'||actx.state==='interrupted'){
+    // ペダルリリース時に actx がまだ止まっているなら音を即時停止
+    stopAll(true);
+    return;
+  }
   const t=actx.currentTime+AHEAD;
   if(currentMode==='piano'){
     if(pianoPlayMode==='play'){
-      // ペダルを離した: 鍵盤もすでに離している音（pianoHeldNodesにない）をリリース
+      // ペダルを離した: 鍵盤もすでに離している音（pianoHeldNotesにない）をリリース
       // 本物ピアノと同様、まだ押さえている鍵盤の音はそのまま継続
       var toDelete=[];
       activeNodes.forEach(function(node,n){
@@ -3033,7 +3082,12 @@ function _sustainRelease(){
           toDelete.push(n);
         }
       });
-      toDelete.forEach(function(n){activeNodes.delete(n);});
+      toDelete.forEach(function(n){
+        activeNodes.delete(n);
+        // サスティン中に pianoSelected へ残していた離鍵済みの音もここで解除
+        // → 鍵盤ハイライトが音と同期して消える
+        pianoSelected.delete(n);
+      });
       renderPianoKeys();
       updatePianoResult();
     }
@@ -3262,16 +3316,24 @@ document.addEventListener('selectstart', function(e){
     // Eagerly create and resume AudioContext on first interaction
     // This prevents scheduling-in-the-past delay on first note
     if(!actx) getAC();
-    if(actx&&actx.state==='suspended')actx.resume().catch(()=>{});
+    // 'interrupted' は iOS 独自状態（他アプリが音声を奪った後など）
+    if(actx&&(actx.state==='suspended'||actx.state==='interrupted')){
+      actx.resume().catch(()=>{});
+    }
   },{once:false,passive:true});
 });
 
-// iOS PWA: 他アプリから戻った時に AudioContext を自動 resume
-// visibilitychange で「画面が見える状態に戻った」を検出する
+// iOS PWA: 他アプリから戻った時 / スリープ解除時に AudioContext を自動 resume
+// 'suspended' に加え iOS 独自の 'interrupted' 状態も処理する
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'){
+    // MIDIサスティンペダルの物理状態が不明になるためリセット
+    if(_sustainOn){
+      _sustainOn=false;
+      // activeNodesはそのまま（音は自然減衰に任せる）
+    }
     if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
-    if(actx.state==='suspended'){
+    if(actx.state==='suspended'||actx.state==='interrupted'){
       actx.resume().catch(()=>{});
     }
   }
