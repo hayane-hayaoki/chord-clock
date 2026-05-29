@@ -838,17 +838,27 @@ let limiter=null;
 const activeNodes=new Map(); // semitone -> {osc,vGain}
 let lastChordSemitones=[];   // voice-leading state
 
+function _buildAC(){
+  // AudioContext とノードグラフを新規構築する内部ヘルパー
+  actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  mixGain=actx.createGain();
+  mixGain.gain.value=1.0;
+  limiter=actx.createGain();
+  limiter.gain.value=_volValue;
+  mixGain.connect(limiter);
+  limiter.connect(actx.destination);
+  _updateLatency();
+}
+
 function getAC(){
+  // [音無しFix] "closed" 状態は resume() で回復不可 → 完全に作り直す
+  // iOS PWA では他アプリから戻った時に closed になることがある
+  if(actx && actx.state==='closed'){
+    actx=null; mixGain=null; limiter=null;
+    activeNodes.clear(); // 古いノードは使えないので破棄
+  }
   if(!actx){
-    actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
-    mixGain=actx.createGain();
-    mixGain.gain.value=1.0;
-    limiter=actx.createGain();
-    limiter.gain.value=0.70;
-    mixGain.connect(limiter);
-    limiter.connect(actx.destination);
-    limiter.gain.value=_volValue; // 音量スライダーの初期値を反映
-    _updateLatency(); // デバイスのバッファサイズに合わせてレイテンシー最適化
+    _buildAC();
   }
   // [iPad-FixA] 'interrupted' は iOS 独自状態（他アプリが音声を奪った後）
   if(actx.state==='suspended'||actx.state==='interrupted'){
@@ -984,6 +994,7 @@ document.addEventListener('DOMContentLoaded',function(){
 // 個別に resume().then(再帰) するため nVoices がずれる問題を解消
 function _playMultiOsc(semitones, holdMode){
   if(!semitones.length) return;
+  // [音無しFix] closed なら getAC() 内で再構築される
   const ac=getAC();
   const doPlay=()=>{
     semitones.forEach(function(s){ _playOscImmediate(s, semitones.length, holdMode); });
@@ -2951,25 +2962,25 @@ function renderPianoKeyboard(){
   var totalWhites = 7 * nOct;
 
   var VW = 700;
-  var wkW = VW / totalWhites;  // white key width in SVG units
-  // For 1oct: limit size (roughly between 2oct and 3oct), center it
+  var wkW = VW / totalWhites;
   var svgWidth = VW;
   var offsetX = 0;
   if(nOct === 1){
-    // 2oct keyboard width for 14 white keys → wkW*14 total = VW
-    // 1oct: make it slightly larger than 2oct per-key, but total ~55% of VW
-    wkW = VW / 14 * 1.25; // slightly larger than 2oct key width
+    wkW = VW / 14 * 1.25;
     var kbWidth = wkW * 7;
     offsetX = (VW - kbWidth) / 2;
   }
-  var wkH = wkW * 5.5;        // height (aspect ratio)
-  var bkW = wkW * 0.585;      // black key width
-  var bkH = wkH * 0.63;       // black key height
+  var wkH = wkW * 5.5;
+  var bkW = wkW * 0.585;
+  var bkH = wkH * 0.63;
 
+  // [黒画面Fix] viewBox は先に更新（レイアウト確定）
   svgEl.setAttribute('viewBox', '0 0 ' + VW + ' ' + Math.round(wkH));
   svgEl.setAttribute('width', '100%');
   svgEl.setAttribute('height', 'auto');
-  while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  // [黒画面Fix] 先に全鍵盤を DocumentFragment で構築し、一括置換
+  var frag = document.createDocumentFragment();
   var whitePC = [0,2,4,5,7,9,11]; // C D E F G A B
 
   // Black key center positions (in white-key-width units from left of octave).
@@ -3016,7 +3027,7 @@ function renderPianoKeyboard(){
           if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
         }, {signal:sig});
       })(midi);
-      svgEl.appendChild(rect);
+      frag.appendChild(rect);
     }
   }
 
@@ -3057,9 +3068,12 @@ function renderPianoKeyboard(){
           if(pianoPlayMode === 'play' && e.buttons > 0) pianoKeyPressPlayUp(m);
         }, {signal:sig});
       })(midi);
-      svgEl.appendChild(rect);
+      frag.appendChild(rect);
     }
   }
+  // [黒画面Fix] 古い鍵盤を消してから新しい鍵盤を一括挿入
+  while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+  svgEl.appendChild(frag);
 }
 
 // Normal mode: 新規音のみ発音（既存音はそのままキープ）
@@ -3515,12 +3529,17 @@ document.addEventListener('selectstart', function(e){
 
 ['touchstart','pointerdown','keydown'].forEach(evt=>{
   document.addEventListener(evt,()=>{
+    // [音無しFix] closed 検知: タップ時に actx が closed なら即再構築
+    // closed は resume() では回復しないので actx ごと作り直す
+    if(actx && actx.state==='closed'){
+      actx=null; mixGain=null; limiter=null;
+      activeNodes.clear();
+    }
     // Eagerly create and resume AudioContext on first interaction
-    // This prevents scheduling-in-the-past delay on first note
     if(!actx) getAC();
     // 'interrupted' は iOS 独自状態（他アプリが音声を奪った後など）
     if(actx&&(actx.state==='suspended'||actx.state==='interrupted')){
-      actx.resume().catch(()=>{});
+      actx.resume().then(()=>_updateLatency()).catch(()=>{});
     }
   },{once:false,passive:true});
 });
@@ -3540,12 +3559,21 @@ document.addEventListener('visibilitychange',function(){
       requestAnimationFrame(function(){
         try{renderSlices();}catch(e){}
         try{renderCenter();}catch(e){}
-        if(currentMode==='piano'&&typeof renderPianoKeys==='function'){
-          try{renderPianoKeys();}catch(e){}
+        if(currentMode==='piano'){
+          // [黒画面Fix] renderPianoKeys は色塗りのみ。鍵盤形状ごと再描画する
+          if(typeof renderPianoKeyboard==='function') try{renderPianoKeyboard();}catch(e){}
+          if(typeof renderPianoKeys==='function')     try{renderPianoKeys();}catch(e){}
         }
       });
     });
     if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
+    // [音無しFix] closed になった actx は再生成が必要
+    if(actx.state==='closed'){
+      actx=null; mixGain=null; limiter=null;
+      activeNodes.clear();
+      _buildAC(); // ユーザー操作イベント内なので新規作成可
+      return;
+    }
     if(actx.state==='suspended'||actx.state==='interrupted'){
       actx.resume().then(()=>_updateLatency()).catch(()=>{});
     }
