@@ -1744,7 +1744,9 @@ function mkT(x,y,txt,sz,fill,anchor,weight){
 }
 
 function renderSlices(){
-  svg.querySelectorAll('.sg').forEach(e=>e.remove());
+  // [黒画面Fix] 先に新しい要素をすべて構築してから古いものをまとめて置換
+  // 「削除→描画」の間に画面更新が入ると真っ黒になるのを防ぐ
+  const frag=document.createDocumentFragment();
   const scaleSet=currentKey.scale?new Set(currentKey.scale):null;
   NOTES.forEach(note=>{
     const i=note.n;
@@ -1849,12 +1851,17 @@ function renderSlices(){
     const nameC=isSel?'#fff':BLACK.has(i)?'#ddd':'#1a1a1a';
     const fs=BLACK.has(i)?(currentKey.acc===null||currentKey.acc===0?'14':'20'):'20';
     g.appendChild(mkT(lx,ly,sliceLabel(i),fs,nameC,'middle','700'));
-    svg.appendChild(g);
+    frag.appendChild(g);
   });
+  // [黒画面Fix] 古いスライスを消してから新しいものを一括挿入
+  // insertBefore で cg（中央円）の前に置くことで描画順序も保つ
+  svg.querySelectorAll('.sg').forEach(e=>e.remove());
+  const cgEl=svg.querySelector('.cg');
+  if(cgEl){ svg.insertBefore(frag,cgEl); } else { svg.appendChild(frag); }
 }
 
 function renderCenter(){
-  svg.querySelectorAll('.cg').forEach(e=>e.remove());
+  // [黒画面Fix] 先に新しい cg グループを完全に構築してから古いものと入れ替える
   const g=document.createElementNS(NS,'g');
   g.setAttribute('class','cg');g.style.cursor='pointer';
   g.addEventListener('click',resetAll);
@@ -1873,17 +1880,17 @@ function renderCenter(){
   const sel=Array.from(selected).sort((a,b)=>a-b);
   if(sel.length===0){
     g.appendChild(mkT(cx,cy,'tap to play','11',TEXT_OR));
-    svg.appendChild(g);return;
+    _replaceCenter(g);return;
   }
   if(sel.length===1){
     g.appendChild(mkT(cx,cy,'1 note','14',TEXT_SUB));
-    svg.appendChild(g);return;
+    _replaceCenter(g);return;
   }
   if(sel.length===2){
     const hits2=detect(sel);
     if(hits2.length===0){
       g.appendChild(mkT(cx,cy,'2 notes','13',TEXT_SUB));
-      svg.appendChild(g);return;
+      _replaceCenter(g);return;
     }
   }
 
@@ -1915,7 +1922,7 @@ function renderCenter(){
   const hits=detect(sel);
   if(hits.length===0){
     g.appendChild(mkT(cx,cy,'?','26',TEXT_SUB));
-    svg.appendChild(g);return;
+    _replaceCenter(g);return;
   }
   const show=hits.slice(0,2);const GAP=22;
   if(show.length===1){
@@ -1940,7 +1947,14 @@ function renderCenter(){
     g.appendChild(mkT(cx,cy,'or','9',TEXT_OR,'middle','400'));
     g.appendChild(mkT(cx,cy+GAP,n2,fs,TEXT_SUB,'middle','500'));
   }
-  svg.appendChild(g);
+  _replaceCenter(g);
+}
+
+// [黒画面Fix] 古い cg を消してから新しい cg を末尾に追加するヘルパー
+// renderCenter の全出口でこれを使うことで「消した瞬間が見える」を防ぐ
+function _replaceCenter(newG){
+  svg.querySelectorAll('.cg').forEach(e=>e.remove());
+  svg.appendChild(newG);
 }
 
 // ===================== RESULTS =====================
