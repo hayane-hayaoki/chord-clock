@@ -1003,6 +1003,11 @@ function _playMultiOsc(semitones, holdMode){
     ac.resume().then(()=>{ _updateLatency(); doPlay(); }).catch(()=>{});
     return;
   }
+  // running 以外（closed後の再構築直後など）は resume してから発音
+  if(ac.state!=='running'){
+    ac.resume().then(()=>{ _updateLatency(); doPlay(); }).catch(doPlay);
+    return;
+  }
   doPlay();
 }
 
@@ -1050,10 +1055,9 @@ function _playOscImmediate(semitone,nVoices,holdMode){
 }
 
 function _playOsc(semitone,nVoices,holdMode){
-  const ac=getAC();
-  // スリープ復帰直後など、AudioContext が suspended/interrupted の場合は
-  // resume() 完了を待ってから再度呼び出す（過去時刻スケジュール防止）
-  if(ac.state==='suspended'||ac.state==='interrupted'){
+  const ac=getAC(); // closed なら getAC() 内で再構築済み
+  // [音無しFix] running 以外は全て resume してから再帰（suspended/interrupted/new）
+  if(ac.state!=='running'){
     ac.resume().then(()=>{ _updateLatency(); _playOsc(semitone,nVoices,holdMode); }).catch(()=>{});
     return;
   }
@@ -2589,11 +2593,9 @@ function setPianoTone(tone){
 
 // Piano専用発音: Soft=サイン波(既存), Bright=パイプオルガン(奇数倍音)
 function _playOscPiano(semitone, nVoices, holdMode){
-  // スリープ復帰直後など、AudioContext が suspended/interrupted の場合は
-  // resume() 完了を待ってから再度呼び出す（_playOsc と同様の対策）
-  // nVoices/holdMode はこの呼び出し時点の値をクロージャで保持するため正確
-  const ac0=getAC();
-  if(ac0.state==='suspended'||ac0.state==='interrupted'){
+  // [音無しFix-Piano] closed/suspended/interrupted/その他 を全て処理
+  const ac0=getAC(); // closed なら getAC() 内で再構築済み
+  if(ac0.state!=='running'){
     ac0.resume().then(()=>_playOscPiano(semitone,nVoices,holdMode)).catch(()=>{});
     return;
   }
@@ -2732,6 +2734,7 @@ function pianoClearAll(){
 // [iPad-FixD] Piano の複数音を resume 完了後に一括発音するヘルパー
 function _playMultiOscPiano(midiArr, holdMode){
   if(!midiArr.length) return;
+  // [音無しFix-Piano] closed は getAC() 内で再構築される
   const ac0=getAC();
   const nv=midiArr.length;
   const doPlay=()=>{
@@ -2740,6 +2743,12 @@ function _playMultiOscPiano(midiArr, holdMode){
   };
   if(ac0.state==='suspended'||ac0.state==='interrupted'){
     ac0.resume().then(doPlay).catch(()=>{});
+    return;
+  }
+  // closed の場合は getAC() で再構築済みだが state が running でない可能性
+  // → resume を試みてから発音
+  if(ac0.state!=='running'){
+    ac0.resume().then(doPlay).catch(doPlay);
     return;
   }
   doPlay();
@@ -3537,8 +3546,8 @@ document.addEventListener('selectstart', function(e){
     }
     // Eagerly create and resume AudioContext on first interaction
     if(!actx) getAC();
-    // 'interrupted' は iOS 独自状態（他アプリが音声を奪った後など）
-    if(actx&&(actx.state==='suspended'||actx.state==='interrupted')){
+    // running 以外は全て resume を試みる（suspended/interrupted/new context）
+    if(actx && actx.state!=='running'){
       actx.resume().then(()=>_updateLatency()).catch(()=>{});
     }
   },{once:false,passive:true});
@@ -3590,10 +3599,13 @@ document.addEventListener('visibilitychange',function(){
     })();
     if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
     // [音無しFix] closed になった actx は再生成が必要
+    // visibilitychange はユーザー操作イベントではないため
+    // iOS では AudioContext 新規作成がブロックされることがある
+    // → closed フラグを立てて、次のタップ時に getAC() で確実に再構築
     if(actx.state==='closed'){
       actx=null; mixGain=null; limiter=null;
       activeNodes.clear();
-      _buildAC(); // ユーザー操作イベント内なので新規作成可
+      // _buildAC() はタップイベントで呼ばれる getAC() に任せる
       return;
     }
     if(actx.state==='suspended'||actx.state==='interrupted'){
