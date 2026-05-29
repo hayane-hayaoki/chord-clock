@@ -850,7 +850,10 @@ function getAC(){
     limiter.gain.value=_volValue; // 音量スライダーの初期値を反映
     _updateLatency(); // デバイスのバッファサイズに合わせてレイテンシー最適化
   }
-  if(actx.state==='suspended')actx.resume().catch(()=>{});
+  // [iPad-FixA] 'interrupted' は iOS 独自状態（他アプリが音声を奪った後）
+  if(actx.state==='suspended'||actx.state==='interrupted'){
+    actx.resume().then(()=>_updateLatency()).catch(()=>{});
+  }
   return actx;
 }
 function voiceLevel(nVoices){return Math.min(0.50,0.50/Math.sqrt(Math.max(1,nVoices)));}
@@ -976,12 +979,71 @@ document.addEventListener('DOMContentLoaded',function(){
   _updateVolUI();
 });
 
+// [iPad-FixB] 複数音を resume 完了後に一括発音するヘルパー
+// forEach で _playOsc を並列呼びすると、suspended 時に各音が
+// 個別に resume().then(再帰) するため nVoices がずれる問題を解消
+function _playMultiOsc(semitones, holdMode){
+  if(!semitones.length) return;
+  const ac=getAC();
+  const doPlay=()=>{
+    semitones.forEach(function(s){ _playOscImmediate(s, semitones.length, holdMode); });
+  };
+  if(ac.state==='suspended'||ac.state==='interrupted'){
+    ac.resume().then(()=>{ _updateLatency(); doPlay(); }).catch(()=>{});
+    return;
+  }
+  doPlay();
+}
+
+// _playOsc の内部実装（resume チェックなし・一括発音から呼ばれる）
+function _playOscImmediate(semitone,nVoices,holdMode){
+  const ac=getAC();
+  // 同じsemitoneが既に鳴っている場合は先に即時停止（二重登録防止）
+  if(activeNodes.has(semitone)){
+    const old=activeNodes.get(semitone);
+    try{
+      const og=old.vGain.gain;
+      const ot=ac.currentTime+AHEAD;
+      og.cancelScheduledValues(ot);
+      og.setValueAtTime(Math.max(og.value,0.0001),ot);
+      og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
+      if(old.oscs){old.oscs.forEach(function(o){try{o.stop(ot+FADE_IMM+0.002);}catch(e){}});}
+      else if(old.osc){try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
+    }catch(e){}
+    activeNodes.delete(semitone);
+  }
+  const freq=442*Math.pow(2,(semitone-69)/12);
+  const level=voiceLevel(nVoices)*loudnessComp(semitone);
+  const t=ac.currentTime+START_OFFSET;
+  const osc=ac.createOscillator();
+  const vGain=ac.createGain();
+  osc.type='sine';
+  osc.frequency.value=freq;
+  const g=vGain.gain;
+  g.setValueAtTime(0.0001,t);
+  g.exponentialRampToValueAtTime(level,t+0.012);
+  if(holdMode||_sustainOn){
+    g.setValueAtTime(level,t+0.012);
+    g.linearRampToValueAtTime(level*0.85,t+0.4);
+    g.linearRampToValueAtTime(level*0.65,t+1.5);
+    g.linearRampToValueAtTime(0.0001,t+12);
+  } else {
+    g.setValueAtTime(level,t+0.012);
+    g.linearRampToValueAtTime(0.0001,t+3.5);
+  }
+  osc.connect(vGain);
+  vGain.connect(mixGain);
+  osc.start(t);
+  osc.stop(t+12.1);
+  activeNodes.set(semitone,{osc,vGain});
+}
+
 function _playOsc(semitone,nVoices,holdMode){
   const ac=getAC();
   // スリープ復帰直後など、AudioContext が suspended/interrupted の場合は
   // resume() 完了を待ってから再度呼び出す（過去時刻スケジュール防止）
   if(ac.state==='suspended'||ac.state==='interrupted'){
-    ac.resume().then(()=>_playOsc(semitone,nVoices,holdMode)).catch(()=>{});
+    ac.resume().then(()=>{ _updateLatency(); _playOsc(semitone,nVoices,holdMode); }).catch(()=>{});
     return;
   }
   // 同じsemitoneが既に鳴っている場合は先に即時停止（二重登録防止）
@@ -993,7 +1055,9 @@ function _playOsc(semitone,nVoices,holdMode){
       og.cancelScheduledValues(ot);
       og.setValueAtTime(Math.max(og.value,0.0001),ot);
       og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
-      old.osc.stop(ot+FADE_IMM+0.002);
+      // [Fix2] oscs(bright) と osc(soft) の両方に対応
+      if(old.oscs){old.oscs.forEach(function(o){try{o.stop(ot+FADE_IMM+0.002);}catch(e){}});}
+      else if(old.osc){try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
     }catch(e){}
     activeNodes.delete(semitone);
   }
@@ -1129,18 +1193,16 @@ function renderProgLog(){
   var wrapB=document.getElementById('prog-log-wrap-bottom');
   var innerB=document.getElementById('prog-log-inner-bottom');
 
-  // 両方クリア
+  // [Fix5] display の直接操作を廃止。表示制御は CSS (body.next-mode) に任せる。
+  // JS は innerHTML の更新のみ担当し、style.display との競合を排除。
   if(inner)inner.innerHTML='';
   if(innerB)innerB.innerHTML='';
-  if(wrap)wrap.style.display='none';
-  if(wrapB)wrapB.style.display='none';
 
   if(progLog.length===0)return;
-  if(!isNext)return; // next-mode以外では非表示
+  if(!isNext)return; // next-mode以外では innerHTML だけクリアして終了
 
-  // next-mode: 下部に表示
+  // next-mode: 下部ログに書き込む
   if(!wrapB||!innerB)return;
-  wrapB.style.display='block';
   const ROW_SIZE=8; // 1行あたりのコード数
   function buildItems(target){
     progLog.forEach(function(item,i){
@@ -1217,7 +1279,8 @@ function playPCs(pcs,rootPc,suf){
     }
   }
   stopAll(true);
-  semitones.forEach(function(s){_playOsc(s,semitones.length,false);});
+  // [iPad-FixB] 複数音を resume 完了後に一括発音
+  _playMultiOsc(semitones, false);
   lastChordSemitones=[].concat(semitones);
   var reg=document.getElementById('vl-register');
   if(reg)reg.textContent=(currentMode==='next')?registerLabel(semitones):'';
@@ -1241,7 +1304,8 @@ function playSelected(rootOverride){
   } else {
     stopAll(true);
     var midis=analyzeVoicing(sel,root);
-    midis.forEach(function(m){_playOsc(m,midis.length,false);});
+    // [iPad-FixB] resume 完了後に一括発音
+    _playMultiOsc(midis, false);
   }
 }
 function playChordDef(root,s){
@@ -1253,7 +1317,8 @@ function playChordDef(root,s){
   } else {
     stopAll(true);
     var midis=analyzeVoicing(notes,root);
-    midis.forEach(function(m){_playOsc(m,midis.length,false);});
+    // [iPad-FixB] resume 完了後に一括発音
+    _playMultiOsc(midis, false);
   }
 }
 
@@ -1700,7 +1765,8 @@ function renderSlices(){
       if(currentMode!=='play')return;
       e.preventDefault();
       // setPointerCapture を使わない: スライドで他スライスに入れるよう
-      playModePress(i);
+      // [Fix④] pointerenter と二重発音しないよう playActive チェック
+      if(!playActive.has(i)) playModePress(i);
     });
     g.addEventListener('pointerup',e=>{
       if(currentMode!=='play')return;
@@ -1883,8 +1949,10 @@ function getExtensions(sel, currentHits){
   // Build a set of current matched chord identities (root+suffix combos)
   const curIds=new Set(currentHits.map(h=>h.root+'_'+h.s));
   const res=[];const seen=new Set();
+  // [Fix4] グローバル selected ではなく引数 sel を参照（一貫性確保）
+  const selSet=new Set(sel);
   for(let add=0;add<12;add++){
-    if(selected.has(add))continue; // skip already-selected notes
+    if(selSet.has(add))continue; // skip already-selected notes
     const trySet=[...sel,add];
     const newHits=detect(trySet);
     newHits.forEach(h=>{
@@ -2042,7 +2110,13 @@ function setMode(mode){
   document.body.classList.toggle('play-mode',mode==='play');
   document.body.classList.toggle('next-mode',mode==='next');
   document.body.classList.toggle('piano-mode',mode==='piano');
-  if(mode==='piano'){renderPianoKeyboard();_updateOctShiftUI();_updateTransposeUI();}
+  if(mode==='piano'){
+    renderPianoKeyboard();
+    _updateOctShiftUI();
+    _updateTransposeUI();
+    // [Fix①] HTML初期値とJS状態を同期させる（初回切替時も正しくボタン表示）
+    setPianoHold(pianoPlayMode);
+  }
   // Piano専用オクターブシフトをリセット（pianoモード以外に切り替わったとき）
   if(mode!=='piano'){
     pianoOctaveShift=0;
@@ -2054,11 +2128,12 @@ function setMode(mode){
   // stopAll(true) が activeNodes を全消去するので、その後 playActive で
   // stopNote を再度呼んでも空振りになる。先に playActive をクリアしてから stopAll。
   playActive.clear();
-  stopAll(true);
-  selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
-  // Piano mode selections も解除
+  // [Fix1] pianoSelected/pianoHeldNotes を先にクリアしてから stopAll
+  // → activeNodes 残留を防ぐ
   if(typeof pianoSelected!=='undefined'){pianoSelected.clear();}
   if(typeof pianoHeldNotes!=='undefined'){pianoHeldNotes.clear();}
+  stopAll(true);
+  selected.clear();selectedOrder=[];sugHL.clear();extHL.clear();
   ncPlayingKey=null;
   lastChordSemitones=[];lastInversion='';
   _prevRootMidi=null;
@@ -2512,8 +2587,9 @@ function _playOscPiano(semitone, nVoices, holdMode){
         og.cancelScheduledValues(ot);
         og.setValueAtTime(Math.max(og.value,0.0001),ot);
         og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
+        // [Fix2] oscs(bright) と osc(soft) の両方に対応
         if(old.oscs){old.oscs.forEach(function(o){try{o.stop(ot+FADE_IMM+0.002);}catch(e){}});}
-        else{try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
+        else if(old.osc){try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
       }catch(e){}
       activeNodes.delete(semitone);
     }
@@ -2628,6 +2704,110 @@ function pianoClearAll(){
   updatePianoResult();
 }
 
+// [iPad-FixD] Piano の複数音を resume 完了後に一括発音するヘルパー
+function _playMultiOscPiano(midiArr, holdMode){
+  if(!midiArr.length) return;
+  const ac0=getAC();
+  const nv=midiArr.length;
+  const doPlay=()=>{
+    _updateLatency();
+    midiArr.forEach(function(m){ _playOscPianoImmediate(m, nv, holdMode); });
+  };
+  if(ac0.state==='suspended'||ac0.state==='interrupted'){
+    ac0.resume().then(doPlay).catch(()=>{});
+    return;
+  }
+  doPlay();
+}
+
+// _playOscPiano の resume チェックなし版（_playMultiOscPiano から呼ばれる）
+function _playOscPianoImmediate(semitone, nVoices, holdMode){
+  var transposedSemitone = semitone + pianoTranspose;
+  if(pianoTone === 'soft'){
+    const ac = getAC();
+    if(activeNodes.has(semitone)){
+      const old = activeNodes.get(semitone);
+      try{
+        const og = old.vGain.gain;
+        const ot = ac.currentTime + AHEAD;
+        og.cancelScheduledValues(ot);
+        og.setValueAtTime(Math.max(og.value,0.0001),ot);
+        og.exponentialRampToValueAtTime(0.0001,ot+FADE_IMM);
+        if(old.oscs){old.oscs.forEach(function(o){try{o.stop(ot+FADE_IMM+0.002);}catch(e){}});}
+        else if(old.osc){try{old.osc.stop(ot+FADE_IMM+0.002);}catch(e){}}
+      }catch(e){}
+      activeNodes.delete(semitone);
+    }
+    const freq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
+    const level = voiceLevel(nVoices) * loudnessComp(transposedSemitone);
+    const t = ac.currentTime + START_OFFSET;
+    const osc = ac.createOscillator();
+    const vGain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const g = vGain.gain;
+    g.setValueAtTime(0.0001, t);
+    g.exponentialRampToValueAtTime(level, t + 0.012);
+    if(holdMode || _sustainOn){
+      g.setValueAtTime(level, t + 0.012);
+      g.linearRampToValueAtTime(level * 0.85, t + 0.4);
+      g.linearRampToValueAtTime(level * 0.65, t + 1.5);
+      g.linearRampToValueAtTime(0.0001, t + 12);
+    } else {
+      g.setValueAtTime(level, t + 0.012);
+      g.linearRampToValueAtTime(0.0001, t + 3.5);
+    }
+    osc.connect(vGain);
+    vGain.connect(mixGain);
+    osc.start(t);
+    osc.stop(t + 12.1);
+    activeNodes.set(semitone, {osc, vGain});
+    return;
+  }
+  // Bright
+  const ac = getAC();
+  if(activeNodes.has(semitone)){
+    const old = activeNodes.get(semitone);
+    try{
+      const og = old.vGain.gain;
+      const ot = ac.currentTime + AHEAD;
+      og.cancelScheduledValues(ot);
+      og.setValueAtTime(Math.max(og.value, 0.0001), ot);
+      og.exponentialRampToValueAtTime(0.0001, ot + FADE_IMM);
+      if(old.oscs){ old.oscs.forEach(function(o){ try{ o.stop(ot+FADE_IMM+0.002); }catch(e){} }); }
+      else if(old.osc){ try{ old.osc.stop(ot+FADE_IMM+0.002); }catch(e){} }
+    }catch(e){}
+    activeNodes.delete(semitone);
+  }
+  const baseFreq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
+  const level = voiceLevel(nVoices) * loudnessComp(semitone) * 1.6;
+  const t = ac.currentTime + START_OFFSET;
+  const vGain = ac.createGain();
+  const g = vGain.gain;
+  g.setValueAtTime(0.0001, t);
+  g.exponentialRampToValueAtTime(level, t + 0.012);
+  if(holdMode || _sustainOn){
+    g.setValueAtTime(level, t + 0.012);
+    g.linearRampToValueAtTime(level * 0.97, t + 12);
+  } else {
+    g.setValueAtTime(level, t + 0.012);
+    g.linearRampToValueAtTime(0.0001, t + 3.5);
+  }
+  var eq = ac.createBiquadFilter();
+  eq.type = 'peaking'; eq.frequency.value = 1100; eq.Q.value = 1.2; eq.gain.value = 8;
+  vGain.connect(eq); eq.connect(mixGain);
+  var partials = [[1,0.55],[3,0.25],[5,0.12],[7,0.05],[9,0.02]];
+  var oscs = partials.map(function(p){
+    var o = ac.createOscillator();
+    o.type = 'sine'; o.frequency.value = baseFreq * p[0];
+    var pg = ac.createGain(); pg.gain.value = p[1];
+    o.connect(pg); pg.connect(vGain);
+    o.start(t); o.stop(t + 12.1);
+    return o;
+  });
+  activeNodes.set(semitone, { oscs: oscs, vGain: vGain });
+}
+
 function pianoReplay(){
   if(pianoSelected.size === 0) return;
   stopAll(true);
@@ -2636,8 +2816,8 @@ function pianoReplay(){
   // ncPlayingKeyをnullにした後パネルを再描画してハイライトを消す
   if(currentMode==='next')updateNextChordPanel();
   var midiArr = Array.from(pianoSelected).sort(function(a,b){return a-b;});
-  var nv = midiArr.length;
-  midiArr.forEach(function(m){ _playOscPiano(m, nv, false); });
+  // [iPad-FixD] resume 完了後に一括発音
+  _playMultiOscPiano(midiArr, false);
 }
 
 // ---- SVG Piano Keyboard (pixel-perfect black key positions) ----
@@ -2879,7 +3059,8 @@ function pianoKeyPressNormal(midi){
     // 新しい音だけ追加発音（既存の鳴っている音はキープ）
     pianoSelected.add(midi);
     var nv = pianoSelected.size;
-    _playOscPiano(midi, nv, false); // false = 3.5s sustain（oct数に無関係）
+    // [iPad-FixD2] resume 完了後に発音（単音でも _playMultiOscPiano 経由）
+    _playMultiOscPiano([midi], false);
   }
   renderPianoKeys();
   updatePianoResult();
@@ -2898,7 +3079,8 @@ function pianoKeyPressPlayDown(midi){
   // _playOscPiano がサスペンド復帰時に then() で再帰する際も
   // この時点のボイス数を使うため音量バランスがずれない。
   var nv = pianoHeldNotes.size;
-  _playOscPiano(midi, nv, true); // true = hold (play-mode sustain)
+  // [iPad-FixD3] resume 完了後に発音
+  _playMultiOscPiano([midi], true);
   renderPianoKeys();
   updatePianoResult();
 }
@@ -2950,8 +3132,9 @@ function updatePianoResult(){
 
   // Single note
   if(pcs.length === 1){
-    var flat = currentKey.flat;
+    // [Fix③] useFlat() で統一（他のカード表示と同じロジックに）
     var pcT = ((pcs[0] + pianoTranspose) % 12 + 12) % 12;
+    var flat = useFlat(pcT, '');
     var nm = noteName(pcT, flat);
     var div = document.createElement('div');
     div.className = 'result-block';
@@ -2990,7 +3173,7 @@ function updatePianoResult(){
   var inversionHit = '';
   // Find a root-position match first
   var rootPosHit = null;
-  for(var i=0;i<hits.length;i++){
+  for(let i=0;i<hits.length;i++){
     if(hits[i].root === bassPc){ rootPosHit = hits[i]; break; }
   }
   if(!rootPosHit){
@@ -3005,7 +3188,8 @@ function updatePianoResult(){
 
   // Reorder hits: rootPosHit first, then others
   var orderedHits = [rootPosHit];
-  for(var i=0;i<hits.length;i++){
+  for(let i=0;i<hits.length;i++){
+    // [Fix⑤] var→let でループ変数汚染を防止
     if(hits[i].root!==rootPosHit.root || hits[i].s!==rootPosHit.s) orderedHits.push(hits[i]);
   }
 
@@ -3049,8 +3233,11 @@ function pianoPossibleChords(pcs){
     if(a.root !== b.root) return a.root - b.root;
     return a.pri - b.pri;
   });
+  // [Fix3] flat フラグを useFlat() で統一（currentKey.flat直参照から変更）
   return collected.slice(0, 12).map(function(c){
-    return '<span class="piano-possible-tag">' + c.nm + '</span>';
+    var flatF = useFlat(c.root, c.s);
+    var nmF = noteName(c.root, flatF) + c.s;
+    return '<span class="piano-possible-tag">' + nmF + '</span>';
   }).join('');
 }
 
@@ -3281,7 +3468,8 @@ function initMIDI(){
     var pcs=ch?ch.iv.map(function(iv){return(it.root+iv)%12;}):[it.root];
     var sems=voiceLeadSemitones(pcs,lastChordSemitones);
     stopAll(true);
-    sems.forEach(function(s){_playOsc(s,sems.length,false);});
+    // [Fix②] resume完了後に一括発音（スリープ復帰直後でも鳴るように）
+    _playMultiOsc(sems, false);
     lastChordSemitones=[].concat(sems);
     lastInversion=detectInversion(sems,it.root);
     progLog.forEach(function(p){p._active=false;});
@@ -3332,9 +3520,20 @@ document.addEventListener('visibilitychange',function(){
       _sustainOn=false;
       // activeNodesはそのまま（音は自然減衰に任せる）
     }
+    // [iPad-FixC] スリープ解除後にSVGが消えることがある（WebKit GPUメモリ解放）
+    // rAF2重で確実に再描画する
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        try{renderSlices();}catch(e){}
+        try{renderCenter();}catch(e){}
+        if(currentMode==='piano'&&typeof renderPianoKeys==='function'){
+          try{renderPianoKeys();}catch(e){}
+        }
+      });
+    });
     if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
     if(actx.state==='suspended'||actx.state==='interrupted'){
-      actx.resume().catch(()=>{});
+      actx.resume().then(()=>_updateLatency()).catch(()=>{});
     }
   }
 });
