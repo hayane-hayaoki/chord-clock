@@ -653,14 +653,17 @@ body.piano-mode #extend-area { display: none !important; }
     else{setManifest();}
   }catch(e){}
 
-  // Service Worker — skip entirely on Android to avoid blocking
-  // SW via blob URL is blocked by Android Chrome's Content-Security-Policy
-  // Only register if we have a real URL (not blob/file)
+  // Service Worker — オフライン対応
+  // [重要] iOS Safari は blob:/data: URL からの SW 登録を許可しない。
+  // そのため同一オリジンの実ファイル ./sw.js を登録する。
+  // （index.html と同じフォルダに sw.js を置くこと）
   try{
-    if('serviceWorker' in navigator && location.protocol==='https:' && !location.href.startsWith('blob:')){
-      const swCode=`const C='cc-v13';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)).catch(()=>new Response('offline')));});`;
-      const b=new Blob([swCode],{type:'application/javascript'});
-      navigator.serviceWorker.register(URL.createObjectURL(b)).catch(()=>{});
+    if('serviceWorker' in navigator &&
+       (location.protocol==='https:' ||
+        location.hostname==='localhost' || location.hostname==='127.0.0.1')){
+      window.addEventListener('load',function(){
+        navigator.serviceWorker.register('./sw.js').catch(function(){});
+      });
     }
   }catch(e){}
 })();
@@ -835,12 +838,19 @@ CHORDS.forEach(ch=>{
 let actx=null;
 let mixGain=null;
 let limiter=null;
+let _acNeedsKick=false;      // [A案] 背景復帰後、次のユーザー操作で AudioContext を作り直すフラグ
 const activeNodes=new Map(); // semitone -> {osc,vGain}
 let lastChordSemitones=[];   // voice-leading state
 
 function _buildAC(){
   // AudioContext とノードグラフを新規構築する内部ヘルパー
   actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  // [A案] iOS の割り込み(interrupted)/closed を検知したら、次の操作で作り直す
+  actx.onstatechange=function(){
+    if(actx && (actx.state==='interrupted'||actx.state==='closed')){
+      _acNeedsKick=true;
+    }
+  };
   mixGain=actx.createGain();
   mixGain.gain.value=1.0;
   limiter=actx.createGain();
@@ -850,12 +860,34 @@ function _buildAC(){
   _updateLatency();
 }
 
+// [A案・鉄壁] 古い context を確実に閉じてから新規構築する。
+// iOS は「state は running なのに実際は音が出ない」ゾンビ状態になることがあり、
+// これは resume() では回復しない。ユーザー操作内で context を作り直すのが唯一確実な復帰。
+function _forceRebuildAC(){
+  const old=actx;
+  actx=null; mixGain=null; limiter=null;
+  activeNodes.clear(); // 古いノードは新 context では使えないので破棄
+  if(old){
+    try{ old.onstatechange=null; }catch(e){}
+    try{ old.close(); }catch(e){} // iOS の AudioContext 数上限対策（close は非同期だが待たない）
+  }
+  _buildAC();
+}
+
 function getAC(){
+  // [A案] 背景から戻った直後の最初の呼び出しで、state が何であろうと作り直す。
+  // この関数は必ずユーザー操作起点で呼ばれるので、生きた context が確実に得られる。
+  if(_acNeedsKick){
+    _acNeedsKick=false;
+    _forceRebuildAC();
+    if(actx.state!=='running'){
+      actx.resume().then(()=>_updateLatency()).catch(()=>{});
+    }
+    return actx;
+  }
   // [音無しFix] "closed" 状態は resume() で回復不可 → 完全に作り直す
-  // iOS PWA では他アプリから戻った時に closed になることがある
   if(actx && actx.state==='closed'){
-    actx=null; mixGain=null; limiter=null;
-    activeNodes.clear(); // 古いノードは使えないので破棄
+    _forceRebuildAC();
   }
   if(!actx){
     _buildAC();
@@ -3538,81 +3570,75 @@ document.addEventListener('selectstart', function(e){
 
 ['touchstart','pointerdown','keydown'].forEach(evt=>{
   document.addEventListener(evt,()=>{
-    // [音無しFix] closed 検知: タップ時に actx が closed なら即再構築
-    // closed は resume() では回復しないので actx ごと作り直す
-    if(actx && actx.state==='closed'){
-      actx=null; mixGain=null; limiter=null;
-      activeNodes.clear();
-    }
-    // Eagerly create and resume AudioContext on first interaction
-    if(!actx) getAC();
-    // running 以外は全て resume を試みる（suspended/interrupted/new context）
+    // [A案] ユーザー操作のたびに getAC() を通す。
+    // closed / 背景復帰(kick) / suspended / interrupted を getAC() 内で一括処理し、
+    // 必要なら生きた context に作り直す（running ゾンビもここで確実に潰す）。
+    getAC();
     if(actx && actx.state!=='running'){
       actx.resume().then(()=>_updateLatency()).catch(()=>{});
     }
   },{once:false,passive:true});
 });
 
-// iOS PWA: 他アプリから戻った時 / スリープ解除時に AudioContext を自動 resume
-// 'suspended' に加え iOS 独自の 'interrupted' 状態も処理する
-document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='visible'){
-    // MIDIサスティンペダルの物理状態が不明になるためリセット
-    if(_sustainOn){
-      _sustainOn=false;
-      // activeNodesはそのまま（音は自然減衰に任せる）
-    }
-    // [黒画面Fix-最終] 復帰時の黒画面対策
-    // 手順: 描画エリアを即座に非表示 → rAFで再描画 → 再表示
-    // 「黒い中間状態がユーザーに見える」時間をゼロにする
-    (function(){
-      // 現在のモードに応じて対象要素を選ぶ
-      var targets = [];
-      if(currentMode==='piano'){
-        var kw = document.getElementById('piano-keyboard-wrap');
-        var iw = document.getElementById('piano-info-zone');
-        if(kw) targets.push(kw);
-        if(iw) targets.push(iw);
-      } else {
-        var sw = document.getElementById('svg-wrap');
-        if(sw) targets.push(sw);
-      }
-      // 即座に非表示（黒い瞬間を隠す）
-      targets.forEach(function(el){ el.style.opacity='0'; el.style.transition='none'; });
+// ===================== iOS PWA 復帰処理（描画 + オーディオ） =====================
+// [黒画面Fix] 復帰時にビューポート全体を強制再ラスタライズし、
+// 「半分黒・半分灰のまま数秒固まる」状態を解消する。
+// 旧版は #svg-wrap だけ opacity 操作していたが、このグリッチは画面全体で起きるため
+// 文書全体（#app）に効かせる必要がある。
+function _forceRepaint(){
+  // 1) 描画内容を作り直す（中身が欠けている場合の保険）
+  try{renderSlices();}catch(e){}
+  try{renderCenter();}catch(e){}
+  if(currentMode==='piano'){
+    if(typeof renderPianoKeyboard==='function') try{renderPianoKeyboard();}catch(e){}
+    if(typeof renderPianoKeys==='function')     try{renderPianoKeys();}catch(e){}
+  }
+  // 2) #app を一瞬 display:none → 表示に戻し、間に offsetHeight を読んで
+  //    「隠した状態」「表示状態」を順にレイアウト確定させ、WebKit に再ラスタライズを強制する。
+  //    同期処理なので途中の paint は発生せず、ユーザーにチラつきは見えない。
+  var app=document.getElementById('app')||document.body;
+  var sy=window.scrollY||window.pageYOffset||0;
+  try{
+    app.style.display='none';
+    void app.offsetHeight;   // ← hidden 状態でレイアウト強制
+    app.style.display='';
+    void app.offsetHeight;   // ← 表示状態でレイアウト強制 → 再ラスタライズ誘発
+  }catch(e){}
+  // 3) 1px スクロール nudge でコンポジタ面を叩く（残った灰色の貼り直し）
+  try{ window.scrollTo(0,sy+1); window.scrollTo(0,sy); }catch(e){}
+}
 
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          // 再描画実行
-          try{renderSlices();}catch(e){}
-          try{renderCenter();}catch(e){}
-          if(currentMode==='piano'){
-            if(typeof renderPianoKeyboard==='function') try{renderPianoKeyboard();}catch(e){}
-            if(typeof renderPianoKeys==='function')     try{renderPianoKeys();}catch(e){}
-          }
-          // 再描画完了後にフェードインで表示（一瞬で戻す）
-          targets.forEach(function(el){
-            el.style.transition='opacity 0.15s ease';
-            el.style.opacity='1';
-          });
-        });
-      });
-    })();
-    if(!actx) return; // まだ一度も音を鳴らしていなければ何もしない
-    // [音無しFix] closed になった actx は再生成が必要
-    // visibilitychange はユーザー操作イベントではないため
-    // iOS では AudioContext 新規作成がブロックされることがある
-    // → closed フラグを立てて、次のタップ時に getAC() で確実に再構築
-    if(actx.state==='closed'){
-      actx=null; mixGain=null; limiter=null;
-      activeNodes.clear();
-      // _buildAC() はタップイベントで呼ばれる getAC() に任せる
-      return;
-    }
-    if(actx.state==='suspended'||actx.state==='interrupted'){
-      actx.resume().then(()=>_updateLatency()).catch(()=>{});
-    }
+// 他アプリから戻った時 / スリープ解除時の復帰
+document.addEventListener('visibilitychange',function(){
+  // --- 背景へ移行: 次のユーザー操作で AudioContext を作り直すフラグを立てる ---
+  if(document.visibilityState==='hidden'){
+    _acNeedsKick=true;
+    return;
+  }
+  // --- 前面へ復帰 ---
+  // MIDIサスティンペダルの物理状態が不明になるためリセット
+  if(typeof _sustainOn!=='undefined' && _sustainOn){ _sustainOn=false; }
+  // 黒画面対策: 次フレームで全画面強制再描画
+  requestAnimationFrame(function(){
+    requestAnimationFrame(_forceRepaint);
+  });
+  // オーディオは best-effort で resume（本命の復帰は次タップ時の getAC()→作り直し）。
+  // visibilitychange はユーザー操作ではないので、ここでは new/close をしない。
+  if(actx && (actx.state==='suspended'||actx.state==='interrupted')){
+    actx.resume().then(()=>_updateLatency()).catch(()=>{});
   }
 });
+
+// bfcache から復帰した場合も同様に立て直す
+window.addEventListener('pageshow',function(e){
+  if(e && e.persisted){
+    _acNeedsKick=true;
+    requestAnimationFrame(function(){ requestAnimationFrame(_forceRepaint); });
+  }
+});
+
+// ページが背景化/破棄される時もフラグを立てる（visibilitychange が来ない経路の保険）
+window.addEventListener('pagehide',function(){ _acNeedsKick=true; });
 
 // Wrap in DOMContentLoaded for Android Chrome compatibility
 function init(){
