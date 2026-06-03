@@ -2695,7 +2695,7 @@ function _playOscPiano(semitone, nVoices, holdMode){
     activeNodes.delete(semitone);
   }
   const baseFreq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
-  const level = voiceLevel(nVoices) * loudnessComp(semitone) * 1.6; // Bright: Softより1.6倍大きく
+  const level = voiceLevel(nVoices) * loudnessComp(transposedSemitone) * 1.6; // Bright: Softより1.6倍大きく（音量補正は実際の音高=transposedで）
   const t = ac.currentTime + START_OFFSET;
   // マスターゲイン
   const vGain = ac.createGain();
@@ -2846,7 +2846,7 @@ function _playOscPianoImmediate(semitone, nVoices, holdMode){
     activeNodes.delete(semitone);
   }
   const baseFreq = 442 * Math.pow(2, (transposedSemitone - 69) / 12);
-  const level = voiceLevel(nVoices) * loudnessComp(semitone) * 1.6;
+  const level = voiceLevel(nVoices) * loudnessComp(transposedSemitone) * 1.6;
   const t = ac.currentTime + START_OFFSET;
   const vGain = ac.createGain();
   const g = vGain.gain;
