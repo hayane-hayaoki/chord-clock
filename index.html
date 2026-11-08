@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="C-C">
 <meta name="theme-color" content="#1c1c1e">
 <title>Chord Clock</title>
@@ -528,6 +527,25 @@ body.piano-mode #extend-area { display: none !important; }
   background:#4A90D9;color:#fff;border-radius:10px;
 }
 </style>
+<style>
+/* 新しいiPad（ホーム画面から開いたとき）は、画面の上の方にモヤをかけるので、中身を少し下げてモヤの外に出す */
+html.ipad-webapp #top-bar{padding-top:calc(34px + env(safe-area-inset-top, 0px))}
+</style>
+<script>
+(function(){
+  function check(){
+    var ua=navigator.userAgent;
+    var ipad=/iPad/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
+    if(!ipad){document.documentElement.classList.remove('ipad-webapp');return;}
+    var land=innerWidth>innerHeight;
+    var sh=land?Math.min(screen.width,screen.height):Math.max(screen.width,screen.height);
+    var gap=sh-innerHeight;
+    var web=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||(gap>=0&&gap<50);
+    document.documentElement.classList.toggle('ipad-webapp',web);
+  }
+  check(); addEventListener('resize',check);
+})();
+</script>
 </head>
 <body>
 <div id="app">

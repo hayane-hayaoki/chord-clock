@@ -7,7 +7,7 @@
    設置: index.html と同じフォルダに置くこと。
    更新: index.html を更新したら下の CACHE のバージョンも上げると確実。
 =================================================================== */
-const CACHE = 'chord-clock-v14';
+const CACHE = 'chord-clock-v15';
 const ASSETS = ['./', './index.html'];
 
 // インストール: アプリ本体を先読みキャッシュ
